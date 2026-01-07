@@ -15,7 +15,16 @@ const verifyToken = async (req, res, next) => {
     }
 
     const currentUser = jwt.verify(token, process.env.JWT_SECRET_KEY);
-    req.user = currentUser;
+
+    // ✅ FIX: Ensure req.user has _id property
+    req.user = {
+      _id: currentUser.id || currentUser._id,
+    };
+
+    console.log("DECODED:", currentUser);
+    console.log("REQ.USER:", req.user);
+    console.log("USER ID:", req.user._id);
+
     next();
   } catch (err) {
     return res.status(401).json("Invalid token");

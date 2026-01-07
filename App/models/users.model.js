@@ -46,40 +46,6 @@ const userSchema = new mongoose.Schema(
         },
       },
     ],
-    orders: [
-      {
-        items: [
-          {
-            product: {
-              type: mongoose.Schema.Types.ObjectId,
-              ref: "Product",
-              required: true,
-            },
-            quantity: { type: Number, required: true, min: 1 },
-            price: { type: Number, required: true },
-            message: { type: String, default: "", maxlength: 100 }, // رسالة لكل منتج
-          },
-        ],
-        totalAmount: { type: Number, required: true },
-        orderType: {
-          type: String,
-          enum: ["delivery", "pickup"],
-          required: true,
-        },
-        scheduledTime: { type: Date, required: true },
-        shippingAddress: {
-          street: String,
-          city: String,
-          country: String,
-        },
-        status: {
-          type: String,
-          enum: ["pending", "confirmed", "shipped", "delivered", "cancelled"],
-          default: "pending",
-        },
-        createdAt: { type: Date, default: Date.now },
-      },
-    ],
   },
   {
     timestamps: true,
