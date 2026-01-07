@@ -57,6 +57,7 @@ const userSchema = new mongoose.Schema(
             },
             quantity: { type: Number, required: true, min: 1 },
             price: { type: Number, required: true },
+            message: { type: String, default: "", maxlength: 100 }, // رسالة لكل منتج
           },
         ],
         totalAmount: { type: Number, required: true },
