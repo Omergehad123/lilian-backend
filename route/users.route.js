@@ -5,6 +5,8 @@ const verifyToken = require("../App/middleware/verifyToken");
 
 router.get("/", verifyToken, userController.getAllUser);
 
+router.get("/admin", verifyToken, userController.getAllUsersAdmin);
+
 router.post("/login", userController.login);
 
 router.post("/register", userController.register);

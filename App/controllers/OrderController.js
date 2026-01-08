@@ -76,8 +76,57 @@ const getOrder = asyncWrapper(async (req, res, next) => {
   });
 });
 
+// @desc    Get all orders (Admin/Manager only)
+// @route   GET /api/orders/admin/all
+// @access  Private (Admin/Manager)
+const getAllOrders = asyncWrapper(async (req, res, next) => {
+  const orders = await Order.find()
+    .populate("products.product")
+    .populate("user", "firstName lastName email")
+    .sort({ createdAt: -1 });
+
+  res.json({
+    status: httpStatusText.SUCCESS,
+    count: orders.length,
+    data: orders,
+  });
+});
+
+// @desc    Update order status
+// @route   PATCH /api/orders/:id/status
+// @access  Private (Admin/Manager)
+const updateOrderStatus = asyncWrapper(async (req, res, next) => {
+  const { status } = req.body;
+  const validStatuses = ["pending", "confirmed", "completed", "cancelled"];
+
+  if (!status || !validStatuses.includes(status)) {
+    return next(
+      new AppError(`Status must be one of: ${validStatuses.join(", ")}`, 400)
+    );
+  }
+
+  const order = await Order.findByIdAndUpdate(
+    req.params.id,
+    { status },
+    { new: true, runValidators: true }
+  )
+    .populate("products.product")
+    .populate("user", "firstName lastName email");
+
+  if (!order) {
+    return next(new AppError("Order not found", 404));
+  }
+
+  res.json({
+    status: httpStatusText.SUCCESS,
+    data: order,
+  });
+});
+
 module.exports = {
   createOrder,
   getOrders,
   getOrder,
+  getAllOrders,
+  updateOrderStatus,
 };

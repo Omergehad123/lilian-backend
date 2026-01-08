@@ -16,9 +16,11 @@ const verifyToken = async (req, res, next) => {
 
     const currentUser = jwt.verify(token, process.env.JWT_SECRET_KEY);
 
-    // ✅ FIX: Ensure req.user has _id property
+    // ✅ FIX: Ensure req.user has _id and role properties
     req.user = {
       _id: currentUser.id || currentUser._id,
+      id: currentUser.id || currentUser._id,
+      role: currentUser.role,
     };
 
     console.log("DECODED:", currentUser);

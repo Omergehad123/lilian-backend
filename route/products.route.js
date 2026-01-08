@@ -25,4 +25,11 @@ router.delete(
   productsController.deleteProduct
 );
 
+router.patch(
+  "/:id",
+  verifyToken,
+  allowTo(userRoles.ADMIN, userRoles.MANAGER),
+  productsController.updateProduct
+);
+
 module.exports = router;

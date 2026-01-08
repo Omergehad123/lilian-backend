@@ -74,9 +74,48 @@ const deleteProduct = asyncWrapper(async (req, res, next) => {
   });
 });
 
+const updateProduct = asyncWrapper(async (req, res, next) => {
+  const { id } = req.params;
+  const updateData = { ...req.body };
+
+  // If name.en is provided, update slug
+  if (updateData.name?.en) {
+    const baseSlug = slugify(updateData.name.en, {
+      lower: true,
+      strict: true,
+      trim: true,
+    });
+    updateData.slug = `${baseSlug}-${Date.now()}`;
+  }
+
+  // Convert price fields to numbers if provided
+  if (updateData.actualPrice !== undefined) {
+    updateData.actualPrice = Number(updateData.actualPrice);
+  }
+  if (updateData.price !== undefined) {
+    updateData.price =
+      updateData.price !== "" ? Number(updateData.price) : updateData.actualPrice;
+  }
+
+  const product = await Product.findByIdAndUpdate(id, updateData, {
+    new: true,
+    runValidators: true,
+  });
+
+  if (!product) {
+    return next(new AppError("Product not found", 404));
+  }
+
+  res.json({
+    status: httpStatusText.SUCCESS,
+    data: product,
+  });
+});
+
 module.exports = {
   addProducts,
   getAllProducts,
   getProduct,
   deleteProduct,
+  updateProduct,
 };

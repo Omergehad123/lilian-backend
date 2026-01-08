@@ -175,8 +175,23 @@ const updateCartItem = asyncWrapper(async (req, res, next) => {
   });
 });
 
+const getAllUsersAdmin = asyncWrapper(async (req, res, next) => {
+  const users = await User.find({})
+    .select("-password -cart -token")
+    .sort({ createdAt: -1 })
+    .limit(50);
+
+  console.log(`✅ Dashboard: Found ${users.length} users`);
+
+  res.json({
+    status: httpStatusText.SUCCESS,
+    data: { users },
+  });
+});
+
 module.exports = {
   getAllUser,
+  getAllUsersAdmin,
   register,
   login,
   addToCart,
