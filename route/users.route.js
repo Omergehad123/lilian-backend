@@ -11,6 +11,15 @@ router.post("/login", userController.login);
 
 router.post("/register", userController.register);
 
+router.post("/logout", (req, res) => {
+  res.clearCookie("token", {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "strict",
+  });
+  res.json({ message: "Logged out successfully" });
+});
+
 router.post("/cart", verifyToken, userController.addToCart);
 
 router.get("/cart", verifyToken, userController.getCart);

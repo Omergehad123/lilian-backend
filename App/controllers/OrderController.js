@@ -123,10 +123,31 @@ const updateOrderStatus = asyncWrapper(async (req, res, next) => {
   });
 });
 
+const deleteOrder = asyncWrapper(async (req, res, next) => {
+  const orderId = req.params.id;
+
+  const order = await Order.findOne({
+    _id: orderId,
+    user: req.user._id, // ✅ Matches createOrder field
+  });
+
+  if (!order || order.status !== "pending") {
+    return next(new AppError("Cannot delete this order", 400));
+  }
+
+  await Order.findByIdAndDelete(orderId);
+
+  res.json({
+    status: httpStatusText.SUCCESS,
+    message: "Order deleted successfully",
+  });
+});
+
 module.exports = {
   createOrder,
   getOrders,
   getOrder,
   getAllOrders,
   updateOrderStatus,
+  deleteOrder,
 };

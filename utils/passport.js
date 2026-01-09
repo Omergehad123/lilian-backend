@@ -9,18 +9,21 @@ passport.use(
       clientID: process.env.GOOGLE_CLIENT_ID,
       clientSecret: process.env.GOOGLE_CLIENT_SECRET,
       callbackURL:
-        "https://lilian-backend-7bjc.onrender.com/api/auth/google/callback", // Must match Google Console exactly
+        "https://lilian-backend-7bjc.onrender.com/api/auth/google/callback",
     },
     async (accessToken, refreshToken, profile, done) => {
+      console.log("🔍 Google Profile:", profile.emails[0].value); // ← ADD THIS
+
       try {
         let user = await User.findOne({ email: profile.emails[0].value });
 
         if (!user) {
+          console.log("✅ Creating new Google user"); // ← ADD THIS
           user = await User.create({
             firstName: profile.name.givenName,
             lastName: profile.name.familyName || "Google",
             email: profile.emails[0].value,
-            password: "google-auth", // Not used
+            password: "google-auth",
           });
         }
 
@@ -30,11 +33,12 @@ passport.use(
           { expiresIn: "7d" }
         );
 
-        // ✅ CRITICAL: Attach token to user object (matches regular login structure)
         user.token = token;
+        console.log("✅ Token generated:", token.slice(0, 20) + "..."); // ← ADD THIS
 
-        return done(null, user); // ✅ Just user (with token attached)
+        return done(null, user);
       } catch (err) {
+        console.error("❌ Passport error:", err); // ← ADD THIS
         return done(err, null);
       }
     }

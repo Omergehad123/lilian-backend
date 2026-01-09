@@ -6,33 +6,33 @@ const {
   getOrder,
   getAllOrders,
   updateOrderStatus,
+  deleteOrder, // ✅ ADD THIS
 } = require("../App/controllers/OrderController");
+const verifyCookieToken = require("../App/middleware/verifyCookieToken");
 const verifyToken = require("../App/middleware/verifyToken");
 const allowTo = require("../App/middleware/allowTo");
 const userRoles = require("../utils/roles");
 
-// Create a new order
-router.post("/", verifyToken, createOrder);
+// ✅ User routes (COOKIE auth)
+router.post("/", verifyCookieToken, createOrder);
+router.get("/", verifyCookieToken, getOrders);
+router.get("/:id", verifyCookieToken, getOrder);
 
-// Get all orders of the logged-in user
-router.get("/", verifyToken, getOrders);
+// 🔥 NEW DELETE ROUTE - CUSTOMER CAN DELETE OWN ORDERS
+router.delete("/:id", verifyCookieToken, deleteOrder); // ✅ ADD THIS LINE
 
-// Admin routes
+// Admin routes (Bearer token)
 router.get(
   "/admin/all",
   verifyToken,
   allowTo(userRoles.ADMIN, userRoles.MANAGER),
   getAllOrders
 );
-
 router.patch(
   "/:id/status",
   verifyToken,
   allowTo(userRoles.ADMIN, userRoles.MANAGER),
   updateOrderStatus
 );
-
-// Get a single order by ID
-router.get("/:id", verifyToken, getOrder);
 
 module.exports = router;

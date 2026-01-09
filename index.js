@@ -32,17 +32,12 @@ app.use("/Uploads", express.static(path.join(__dirname, "Uploads")));
 // CORS setup
 app.use(
   cors({
-    origin: function (origin, callback) {
-      if (!origin) return callback(null, true);
-      if (ALLOWED_ORIGINS.includes(origin)) {
-        callback(null, true);
-      } else {
-        callback(new Error("Not allowed by CORS"));
-      }
-    },
+    origin: ["https://diaa-sallam.com", "http://localhost:5173"],
     credentials: true,
   })
 );
+
+app.set("trust proxy", 1);
 
 // ======== PASSPORT (NO SESSION for JWT) ========
 const passport = require("./utils/passport");
