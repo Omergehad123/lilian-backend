@@ -8,20 +8,17 @@ const {
   updateOrderStatus,
   deleteOrder, // ✅ ADD THIS
 } = require("../App/controllers/OrderController");
-const verifyCookieToken = require("../App/middleware/verifyCookieToken");
-const verifyToken = require("../App/middleware/verifyToken");
+const verifyCookieToken = require("../App/middleware/verifyCookieToken"); // ✅ NEW
+const verifyToken = require("../App/middleware/verifyToken"); // Keep for Bearer
 const allowTo = require("../App/middleware/allowTo");
 const userRoles = require("../utils/roles");
 
-// ✅ User routes (COOKIE auth)
-router.post("/", verifyCookieToken, createOrder);
-router.get("/", verifyCookieToken, getOrders);
-router.get("/:id", verifyCookieToken, getOrder);
+// ✅ Use COOKIE auth for user routes
+router.post("/", verifyCookieToken, createOrder); // ✅ FIXED
+router.get("/", verifyCookieToken, getOrders); // ✅ FIXED
+router.get("/:id", verifyCookieToken, getOrder); // ✅ FIXED
 
-// 🔥 NEW DELETE ROUTE - CUSTOMER CAN DELETE OWN ORDERS
-router.delete("/:id", verifyCookieToken, deleteOrder); // ✅ ADD THIS LINE
-
-// Admin routes (Bearer token)
+// Admin routes (keep Bearer for now)
 router.get(
   "/admin/all",
   verifyToken,
