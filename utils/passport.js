@@ -8,7 +8,8 @@ passport.use(
     {
       clientID: process.env.GOOGLE_CLIENT_ID,
       clientSecret: process.env.GOOGLE_CLIENT_SECRET,
-      callbackURL: "/api/auth/google/callback", // Must match Google Console exactly
+      callbackURL:
+        "https://lilian-backend-7bjc.onrender.com/api/auth/google/callback", // Must match Google Console exactly
     },
     async (accessToken, refreshToken, profile, done) => {
       try {
