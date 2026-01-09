@@ -6,19 +6,20 @@ const {
   getOrder,
   getAllOrders,
   updateOrderStatus,
-  deleteOrder, // ✅ ADD THIS
+  deleteOrder, // ✅ IMPORTED
 } = require("../App/controllers/OrderController");
-const verifyCookieToken = require("../App/middleware/verifyCookieToken"); // ✅ NEW
-const verifyToken = require("../App/middleware/verifyToken"); // Keep for Bearer
+const verifyCookieToken = require("../App/middleware/verifyCookieToken");
+const verifyToken = require("../App/middleware/verifyToken");
 const allowTo = require("../App/middleware/allowTo");
 const userRoles = require("../utils/roles");
 
-// ✅ Use COOKIE auth for user routes
-router.post("/", verifyCookieToken, createOrder); // ✅ FIXED
-router.get("/", verifyCookieToken, getOrders); // ✅ FIXED
-router.get("/:id", verifyCookieToken, getOrder); // ✅ FIXED
+// ✅ CUSTOMER ROUTES (COOKIE AUTH)
+router.post("/", verifyCookieToken, createOrder);
+router.get("/", verifyCookieToken, getOrders);
+router.get("/:id", verifyCookieToken, getOrder);
+router.delete("/:id", verifyCookieToken, deleteOrder); // ✅ DELETE ROUTE ADDED HERE
 
-// Admin routes (keep Bearer for now)
+// ✅ ADMIN ROUTES (BEARER TOKEN)
 router.get(
   "/admin/all",
   verifyToken,
