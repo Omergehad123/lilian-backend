@@ -7,17 +7,17 @@ const {
   getAllOrders,
   updateOrderStatus,
 } = require("../App/controllers/OrderController");
-const verifyToken = require("../App/middleware/verifyToken");
+const verifyCookieToken = require("../App/middleware/verifyCookieToken"); // ✅ NEW
+const verifyToken = require("../App/middleware/verifyToken"); // Keep for Bearer
 const allowTo = require("../App/middleware/allowTo");
 const userRoles = require("../utils/roles");
 
-// Create a new order
-router.post("/", verifyToken, createOrder);
+// ✅ Use COOKIE auth for user routes
+router.post("/", verifyCookieToken, createOrder); // ✅ FIXED
+router.get("/", verifyCookieToken, getOrders); // ✅ FIXED
+router.get("/:id", verifyCookieToken, getOrder); // ✅ FIXED
 
-// Get all orders of the logged-in user
-router.get("/", verifyToken, getOrders);
-
-// Admin routes
+// Admin routes (keep Bearer for now)
 router.get(
   "/admin/all",
   verifyToken,
@@ -31,8 +31,5 @@ router.patch(
   allowTo(userRoles.ADMIN, userRoles.MANAGER),
   updateOrderStatus
 );
-
-// Get a single order by ID
-router.get("/:id", verifyToken, getOrder);
 
 module.exports = router;
