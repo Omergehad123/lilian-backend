@@ -49,6 +49,8 @@ const passport = require("./utils/passport");
 app.use(passport.initialize());
 // ✅ REMOVED: app.use(passport.session()); // No sessions for JWT
 
+const cookieParser = require("cookie-parser");
+app.use(cookieParser());
 // ======== ROUTES ========
 const productsRouter = require("./route/products.route");
 const usersRouter = require("./route/users.route");
