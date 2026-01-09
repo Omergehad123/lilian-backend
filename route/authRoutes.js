@@ -18,7 +18,7 @@ router.get(
   (req, res) => {
     const user = req.user;
     const encodedUser = encodeURIComponent(JSON.stringify(user));
-    res.redirect(`${FRONTEND_URL}/auth/success?user=${encodedUser}`);
+    res.redirect(`${FRONTEND_URL}auth/success?user=${encodedUser}`);
   }
 );
 
