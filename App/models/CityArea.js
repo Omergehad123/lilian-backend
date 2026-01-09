@@ -26,10 +26,11 @@ const citySchema = new mongoose.Schema(
       required: true,
       unique: true,
       uppercase: true,
+      trim: true,
     },
     name: {
-      en: { type: String, required: true },
-      ar: { type: String, required: true },
+      en: { type: String, required: true, trim: true },
+      ar: { type: String, required: true, trim: true },
     },
     areas: [areaSchema],
     isActive: {
