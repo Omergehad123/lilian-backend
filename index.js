@@ -32,7 +32,11 @@ app.use("/Uploads", express.static(path.join(__dirname, "Uploads")));
 // CORS setup
 app.use(
   cors({
-    origin: ["https://diaa-sallam.com", "http://localhost:5173"],
+    origin: [
+      "https://diaa-sallam.com",
+      "http://localhost:5173",
+      "http://localhost:5174",
+    ],
     credentials: true,
   })
 );
@@ -46,18 +50,21 @@ app.use(passport.initialize());
 
 const cookieParser = require("cookie-parser");
 app.use(cookieParser());
+
 // ======== ROUTES ========
 const productsRouter = require("./route/products.route");
 const usersRouter = require("./route/users.route");
 const paymentRouter = require("./route/paymentRoutes");
 const orderRouter = require("./route/order.route");
-const authRoutes = require("./route/authRoutes"); // ✅ Auth routes FIRST
+const authRoutes = require("./route/authRoutes");
+const cityAreaRoutes = require("./route/cityAreaRoutes"); // ✅ NEW ROUTE
 
 app.use("/api/products", productsRouter);
 app.use("/api/users", usersRouter);
 app.use("/api/payment", paymentRouter);
 app.use("/api/orders", orderRouter);
-app.use("/api/auth", authRoutes); // ✅ Stateless JWT auth
+app.use("/api/auth", authRoutes);
+app.use("/api/city-areas", cityAreaRoutes); // ✅ ADDED CITY AREAS ROUTE
 
 // ======== 404 Handler ========
 app.use((req, res, next) => {
