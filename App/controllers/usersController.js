@@ -27,10 +27,7 @@ const register = asyncWrapper(async (req, res, next) => {
   }
 
   const oldUser = await User.findOne({ email });
-
-  if (oldUser) {
-    return next(new AppError("this user already exists", 400));
-  }
+  if (oldUser) return next(new AppError("This user already exists", 400));
 
   const hashedPassword = await bcrypt.hash(password, 10);
 
@@ -48,12 +45,14 @@ const register = asyncWrapper(async (req, res, next) => {
     role: newUser.role,
   });
 
-  newUser.token = token;
   await newUser.save();
+
+  const { password: pwd, ...userWithoutPass } = newUser.toObject();
+  const userWithToken = { ...userWithoutPass, token };
 
   res.status(201).json({
     status: httpStatusText.SUCCESS,
-    data: { user: newUser },
+    data: { user: userWithToken },
   });
 });
 
@@ -65,16 +64,10 @@ const login = asyncWrapper(async (req, res, next) => {
   }
 
   const user = await User.findOne({ email });
-
-  if (!user) {
-    return next(new AppError("Invalid Email or Password", 400));
-  }
+  if (!user) return next(new AppError("Invalid Email or Password", 400));
 
   const matchedPass = await bcrypt.compare(password, user.password);
-
-  if (!matchedPass) {
-    return next(new AppError("Invalid email or password", 400));
-  }
+  if (!matchedPass) return next(new AppError("Invalid Email or Password", 400));
 
   const token = await generateJWT({
     id: user._id,
@@ -82,9 +75,12 @@ const login = asyncWrapper(async (req, res, next) => {
     role: user.role,
   });
 
+  const { password: pwd, ...userWithoutPass } = user.toObject(); // remove password
+  const userWithToken = { ...userWithoutPass, token }; // attach token inside user object
+
   res.json({
     status: httpStatusText.SUCCESS,
-    data: { user },
+    data: { user: userWithToken },
   });
 });
 
@@ -189,6 +185,15 @@ const getAllUsersAdmin = asyncWrapper(async (req, res, next) => {
   });
 });
 
+const getMe = async (req, res) => {
+  try {
+    const user = await User.findById(req.user._id).select("-password");
+    res.json({ user });
+  } catch (err) {
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
 module.exports = {
   getAllUser,
   getAllUsersAdmin,
@@ -198,4 +203,5 @@ module.exports = {
   getCart,
   removeFromCart,
   updateCartItem,
+  getMe,
 };

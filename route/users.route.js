@@ -19,4 +19,6 @@ router.delete("/cart/:productId", verifyToken, userController.removeFromCart);
 
 router.patch("/cart/:productId", verifyToken, userController.updateCartItem);
 
+router.get("/me", verifyToken, userController.getMe);
+
 module.exports = router;

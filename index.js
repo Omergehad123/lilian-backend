@@ -1,4 +1,3 @@
-// index.js
 require("dotenv").config();
 const express = require("express");
 const mongoose = require("mongoose");
@@ -34,7 +33,6 @@ app.use("/Uploads", express.static(path.join(__dirname, "Uploads")));
 app.use(
   cors({
     origin: function (origin, callback) {
-      // allow requests with no origin (like Postman or server-to-server)
       if (!origin) return callback(null, true);
       if (ALLOWED_ORIGINS.includes(origin)) {
         callback(null, true);
@@ -42,20 +40,27 @@ app.use(
         callback(new Error("Not allowed by CORS"));
       }
     },
-    credentials: true, // allow cookies
+    credentials: true,
   })
 );
 
-// ======== Routes ========
+// ======== PASSPORT (NO SESSION for JWT) ========
+const passport = require("./utils/passport");
+app.use(passport.initialize());
+// ✅ REMOVED: app.use(passport.session()); // No sessions for JWT
+
+// ======== ROUTES ========
 const productsRouter = require("./route/products.route");
 const usersRouter = require("./route/users.route");
 const paymentRouter = require("./route/paymentRoutes");
 const orderRouter = require("./route/order.route");
+const authRoutes = require("./route/authRoutes"); // ✅ Auth routes FIRST
 
 app.use("/api/products", productsRouter);
 app.use("/api/users", usersRouter);
 app.use("/api/payment", paymentRouter);
 app.use("/api/orders", orderRouter);
+app.use("/api/auth", authRoutes); // ✅ Stateless JWT auth
 
 // ======== 404 Handler ========
 app.use((req, res, next) => {
