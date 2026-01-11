@@ -33,4 +33,18 @@ router.patch(
   updateOrderStatus
 );
 
+router.get("/admin/pending", verifyToken, allowTo(ADMIN), getPendingOrders);
+router.patch(
+  "/admin/start-time",
+  verifyToken,
+  allowTo(ADMIN),
+  updateAdminStartTime
+);
+router.get(
+  "/admin/check-notifications",
+  verifyToken,
+  allowTo(ADMIN),
+  checkAndSendNotifications
+);
+
 module.exports = router;

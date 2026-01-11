@@ -5,10 +5,10 @@ const path = require("path");
 const multer = require("multer");
 const cors = require("cors");
 const httpStatusText = require("./utils/httpStatusText");
-
+const cron = require("node-cron");
 const app = express();
 const upload = multer({ dest: "./Uploads/" });
-
+cron.schedule("* * * * *", checkAndSendNotifications);
 // ======== Environment Variables ========
 const PORT = process.env.PORT || 5000;
 const DB_URL = process.env.DB_URL;

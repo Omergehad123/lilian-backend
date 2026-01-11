@@ -115,6 +115,12 @@ const orderSchema = new mongoose.Schema(
     specialInstructions: {
       type: String,
     },
+    adminStartTime: {
+      type: String,
+    },
+    orderCreatedAt: { type: Date, default: Date.now },
+    isNotified: { type: Boolean, default: false },
+    notificationSentAt: { type: Date },
   },
   { timestamps: true }
 );
