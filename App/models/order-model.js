@@ -54,11 +54,46 @@ const orderSchema = new mongoose.Schema(
       },
     },
     shippingAddress: {
-      city: { type: String, required: true },
-      area: { type: String, required: true },
-      street: { type: String },
-      block: { type: Number },
-      house: { type: Number },
+      city: {
+        type: String,
+        required: [true, "City is required"],
+      },
+      area: {
+        type: String,
+        required: [
+          function () {
+            return this.orderType === "delivery";
+          },
+          "Area is required for delivery",
+        ],
+      },
+      street: {
+        type: String,
+        required: [
+          function () {
+            return this.orderType === "delivery";
+          },
+          "Street is required for delivery",
+        ],
+      },
+      block: {
+        type: Number,
+        required: [
+          function () {
+            return this.orderType === "delivery";
+          },
+          "Block is required for delivery",
+        ],
+      },
+      house: {
+        type: Number,
+        required: [
+          function () {
+            return this.orderType === "delivery";
+          },
+          "House number is required for delivery",
+        ],
+      },
     },
     userInfo: {
       name: { type: String, required: true },
