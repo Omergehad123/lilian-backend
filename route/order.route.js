@@ -6,7 +6,10 @@ const {
   getOrder,
   getAllOrders,
   updateOrderStatus,
-  deleteOrder, // ✅ IMPORTED
+  deleteOrder,
+  getPendingOrders,
+  checkAndSendNotifications,
+  updateAdminStartTime, // ✅ IMPORTED
 } = require("../App/controllers/OrderController");
 const verifyCookieToken = require("../App/middleware/verifyCookieToken");
 const verifyToken = require("../App/middleware/verifyToken");
@@ -33,17 +36,17 @@ router.patch(
   updateOrderStatus
 );
 
-router.get("/admin/pending", verifyToken, allowTo(ADMIN), getPendingOrders);
+router.get("/admin/pending", verifyToken, allowTo(userRoles.ADMIN), getPendingOrders);
 router.patch(
   "/admin/start-time",
   verifyToken,
-  allowTo(ADMIN),
+  allowTo(userRoles.ADMIN),
   updateAdminStartTime
 );
 router.get(
   "/admin/check-notifications",
   verifyToken,
-  allowTo(ADMIN),
+  allowTo(userRoles.ADMIN),
   checkAndSendNotifications
 );
 

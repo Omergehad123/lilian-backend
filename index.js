@@ -8,7 +8,8 @@ const httpStatusText = require("./utils/httpStatusText");
 const cron = require("node-cron");
 const app = express();
 const upload = multer({ dest: "./Uploads/" });
-cron.schedule("* * * * *", checkAndSendNotifications);
+const OrderController = require("./App/controllers/OrderController");
+cron.schedule("* * * * *", OrderController.checkAndSendNotifications);
 // ======== Environment Variables ========
 const PORT = process.env.PORT || 5000;
 const DB_URL = process.env.DB_URL;
@@ -60,6 +61,9 @@ const orderRouter = require("./route/order.route");
 const authRoutes = require("./route/authRoutes");
 const cityAreaRoutes = require("./route/cityAreaRoutes");
 const promoRoute = require("./route/promos");
+const {
+  checkAndSendNotifications,
+} = require("./App/controllers/OrderController");
 
 app.use("/api/products", productsRouter);
 app.use("/api/users", usersRouter);
