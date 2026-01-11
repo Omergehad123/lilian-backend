@@ -121,8 +121,7 @@ router.delete("/:id", auth, async (req, res) => {
   }
 });
 
-// ✅ VALIDATE PROMO - لكل المستخدمين
-router.post("/validate", auth, async (req, res) => {
+router.post("/validate", async (req, res) => {
   try {
     const { code } = req.body;
     const userId = req.user._id; // ✅ من auth middleware
