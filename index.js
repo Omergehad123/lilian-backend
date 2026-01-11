@@ -35,7 +35,7 @@ app.use(
     origin: [
       "https://diaa-sallam.com",
       "http://localhost:5173",
-      "https://lilyandelarosekw.com/",
+      "https://lilyandelarosekw.com",
     ],
     credentials: true,
   })
