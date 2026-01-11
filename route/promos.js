@@ -1,7 +1,7 @@
 const express = require("express");
 const router = express.Router();
-const Promo = require("../models/Promo");
-const auth = require("../middleware/auth"); // Admin auth middleware
+const Promo = require("../App/models/Promo");
+const auth = require("../App/middleware/auth"); // Admin auth middleware
 
 // GET all promos
 router.get("/", auth, async (req, res) => {
