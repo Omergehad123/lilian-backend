@@ -124,9 +124,8 @@ router.delete("/:id", auth, async (req, res) => {
 router.post("/validate", async (req, res) => {
   try {
     const { code } = req.body;
-    const userId = req.user._id; // ✅ من auth middleware
 
-    // البحث عن الـ promo
+    // ✅ البحث عن الـ promo
     const promo = await Promo.findOne({
       code: code.toUpperCase(),
       isActive: true,
@@ -139,7 +138,7 @@ router.post("/validate", async (req, res) => {
       });
     }
 
-    // فحص تاريخ الانتهاء
+    // ✅ فحص تاريخ الانتهاء
     if (promo.expiryDate && new Date(promo.expiryDate) < new Date()) {
       return res.status(400).json({
         success: false,
@@ -147,7 +146,7 @@ router.post("/validate", async (req, res) => {
       });
     }
 
-    // فحص عدد الاستخدامات الكلي
+    // ✅ فحص عدد الاستخدامات الكلي
     if (promo.maxUses && promo.currentUses >= promo.maxUses) {
       return res.status(400).json({
         success: false,
@@ -155,19 +154,7 @@ router.post("/validate", async (req, res) => {
       });
     }
 
-    // ✅ فحص إذا كان اليوزر استخدمه من قبل
-    const user = await User.findById(userId);
-    const alreadyUsed = user.usedPromoCodes.some(
-      (used) => used.promoCode.toUpperCase() === code.toUpperCase()
-    );
-
-    if (alreadyUsed) {
-      return res.status(400).json({
-        success: false,
-        message: "لقد استخدمت هذا الكود من قبل",
-      });
-    }
-
+    // ✅ NO USER CHECK - PUBLIC endpoint
     res.json({
       success: true,
       promo: {
