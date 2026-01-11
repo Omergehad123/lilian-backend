@@ -104,6 +104,14 @@ const orderSchema = new mongoose.Schema(
       enum: ["pending", "confirmed", "completed", "cancelled"],
       default: "pending",
     },
+    promoCode: {
+      type: String,
+      uppercase: true,
+    },
+    promoDiscount: {
+      type: Number,
+      default: 0,
+    },
   },
   { timestamps: true }
 );

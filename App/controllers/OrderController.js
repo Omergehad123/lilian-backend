@@ -1,57 +1,160 @@
+// controllers/orderController.js
 const Order = require("../models/order-model");
+const User = require("../models/users.model");
+const Promo = require("../models/Promo");
+const mongoose = require("mongoose");
 const asyncWrapper = require("../middleware/asyncWrapper");
 const AppError = require("../../utils/appError");
 const httpStatusText = require("../../utils/httpStatusText");
 
 const createOrder = asyncWrapper(async (req, res, next) => {
-  const {
-    products,
-    totalAmount,
-    orderType,
-    scheduleTime,
-    shippingAddress,
-    userInfo,
-  } = req.body;
+  const session = await mongoose.startSession();
+  session.startTransaction();
 
-  if (!products || !products.length) {
-    return next(new AppError("No products provided", 400));
+  try {
+    const {
+      products,
+      totalAmount,
+      orderType,
+      scheduleTime,
+      shippingAddress,
+      userInfo,
+      promoCode,
+      promoDiscount, // ✅ جديد
+    } = req.body;
+
+    // التحقق من البيانات الأساسية
+    if (!products || !products.length) {
+      throw new AppError("No products provided", 400);
+    }
+
+    if (!orderType || !["pickup", "delivery"].includes(orderType)) {
+      throw new AppError("Invalid order type", 400);
+    }
+
+    if (!scheduleTime?.date || !scheduleTime?.timeSlot) {
+      throw new AppError("Schedule time is required", 400);
+    }
+
+    if (!userInfo?.name || !userInfo?.phone) {
+      throw new AppError("User info (name and phone) is required", 400);
+    }
+
+    // ✅ التحقق من الـ promo code إذا موجود
+    if (promoCode && promoDiscount > 0) {
+      const promo = await Promo.findOne({
+        code: promoCode.toUpperCase(),
+        isActive: true,
+      });
+
+      if (!promo) {
+        throw new AppError("Promo code not found or inactive", 400);
+      }
+
+      // فحص تاريخ الانتهاء
+      if (promo.expiryDate && new Date(promo.expiryDate) < new Date()) {
+        throw new AppError("انتهت صلاحية كود الخصم", 400);
+      }
+
+      // فحص عدد الاستخدامات الكلي
+      if (promo.maxUses && promo.currentUses >= promo.maxUses) {
+        throw new AppError("تم استهلاك كود الخصم بالكامل", 400);
+      }
+
+      // ✅ فحص إذا كان اليوزر استخدمه من قبل
+      const user = await User.findById(req.user._id);
+      const alreadyUsed = user.usedPromoCodes.some(
+        (used) => used.promoCode.toUpperCase() === promoCode.toUpperCase()
+      );
+
+      if (alreadyUsed) {
+        throw new AppError("لقد استخدمت هذا الكود من قبل", 400);
+      }
+
+      // ✅ حفظ الـ promo في اليوزر
+      await User.findByIdAndUpdate(
+        req.user._id,
+        {
+          $push: {
+            usedPromoCodes: {
+              promoCode: promoCode.toUpperCase(),
+              usedAt: new Date(),
+              orderId: null, // سيتم تحديثه لاحقاً
+            },
+          },
+        },
+        { session }
+      );
+
+      // ✅ تحديث currentUses في الـ promo
+      await Promo.findOneAndUpdate(
+        { code: promoCode.toUpperCase() },
+        { $inc: { currentUses: 1 } },
+        { session }
+      );
+    }
+
+    // إنشاء الطلب
+    const order = await Order.create(
+      [
+        {
+          user: req.user._id,
+          products,
+          totalAmount,
+          orderType,
+          scheduleTime,
+          shippingAddress,
+          userInfo,
+          promoCode: promoCode || null, // ✅ جديد
+          promoDiscount: promoDiscount || 0, // ✅ جديد
+        },
+      ],
+      { session }
+    );
+
+    const createdOrder = order[0];
+
+    // ✅ تحديث orderId في usedPromoCodes
+    if (promoCode && promoDiscount > 0) {
+      await User.findByIdAndUpdate(
+        req.user._id,
+        {
+          $set: {
+            "usedPromoCodes.$[elem].orderId": createdOrder._id,
+          },
+        },
+        {
+          arrayFilters: [{ "elem.promoCode": promoCode.toUpperCase() }],
+          session,
+        }
+      );
+    }
+
+    await session.commitTransaction();
+
+    // Populate الطلب
+    const populatedOrder = await Order.findById(createdOrder._id)
+      .populate("products.product")
+      .populate("user", "firstName lastName email");
+
+    res.status(201).json({
+      status: httpStatusText.SUCCESS,
+      data: populatedOrder,
+    });
+  } catch (error) {
+    await session.abortTransaction();
+    next(error);
+  } finally {
+    session.endSession();
   }
-
-  if (!orderType || !["pickup", "delivery"].includes(orderType)) {
-    return next(new AppError("Invalid order type", 400));
-  }
-
-  if (!scheduleTime?.date || !scheduleTime?.timeSlot) {
-    return next(new AppError("Schedule time is required", 400));
-  }
-
-  if (!userInfo?.name || !userInfo?.phone) {
-    return next(new AppError("User info (name and phone) is required", 400));
-  }
-
-  const order = await Order.create({
-    user: req.user._id,
-    products,
-    totalAmount,
-    orderType,
-    scheduleTime,
-    shippingAddress,
-    userInfo,
-  });
-
-  res.status(201).json({
-    status: httpStatusText.SUCCESS,
-    data: order,
-  });
 });
 
-// @desc    Get all orders of logged-in user
-// @route   GET /api/orders
-// @access  Private
+// باقي الـ functions بدون تغيير
 const getOrders = asyncWrapper(async (req, res, next) => {
-  const orders = await Order.find({ user: req.user._id }).populate(
-    "products.product"
-  );
+  const orders = await Order.find({ user: req.user._id })
+    .populate("products.product")
+    .populate("user", "firstName lastName email")
+    .sort({ createdAt: -1 });
 
   res.json({
     status: httpStatusText.SUCCESS,
@@ -60,11 +163,10 @@ const getOrders = asyncWrapper(async (req, res, next) => {
   });
 });
 
-// Optional: get a single order by ID
 const getOrder = asyncWrapper(async (req, res, next) => {
-  const order = await Order.findById(req.params.id).populate(
-    "products.product"
-  );
+  const order = await Order.findById(req.params.id)
+    .populate("products.product")
+    .populate("user", "firstName lastName email");
 
   if (!order) {
     return next(new AppError("Order not found", 404));
@@ -76,9 +178,6 @@ const getOrder = asyncWrapper(async (req, res, next) => {
   });
 });
 
-// @desc    Get all orders (Admin/Manager only)
-// @route   GET /api/orders/admin/all
-// @access  Private (Admin/Manager)
 const getAllOrders = asyncWrapper(async (req, res, next) => {
   const orders = await Order.find()
     .populate("products.product")
@@ -92,9 +191,6 @@ const getAllOrders = asyncWrapper(async (req, res, next) => {
   });
 });
 
-// @desc    Update order status
-// @route   PATCH /api/orders/:id/status
-// @access  Private (Admin/Manager)
 const updateOrderStatus = asyncWrapper(async (req, res, next) => {
   const { status } = req.body;
   const validStatuses = ["pending", "confirmed", "completed", "cancelled"];
@@ -128,7 +224,7 @@ const deleteOrder = asyncWrapper(async (req, res, next) => {
 
   const order = await Order.findOne({
     _id: orderId,
-    user: req.user._id, // ✅ Matches createOrder field
+    user: req.user._id,
   });
 
   if (!order || order.status !== "pending") {

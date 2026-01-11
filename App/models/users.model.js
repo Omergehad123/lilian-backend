@@ -1,3 +1,4 @@
+// models/User.js
 const mongoose = require("mongoose");
 const userRoles = require("../../utils/roles");
 
@@ -43,6 +44,23 @@ const userSchema = new mongoose.Schema(
         price: {
           type: Number,
           required: true,
+        },
+      },
+    ],
+    usedPromoCodes: [
+      {
+        promoCode: {
+          type: String,
+          required: true,
+          uppercase: true,
+        },
+        usedAt: {
+          type: Date,
+          default: Date.now,
+        },
+        orderId: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: "Order",
         },
       },
     ],

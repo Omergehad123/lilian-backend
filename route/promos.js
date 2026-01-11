@@ -1,9 +1,11 @@
+// routes/promos.js
 const express = require("express");
 const router = express.Router();
 const Promo = require("../App/models/Promo");
-const auth = require("../App/middleware/auth"); // Admin auth middleware
+const User = require("../App/models/users.model");
+const auth = require("../App/middleware/auth");
 
-// GET all promos
+// GET all promos (Admin only)
 router.get("/", auth, async (req, res) => {
   try {
     const promos = await Promo.find().sort({ createdAt: -1 });
@@ -13,14 +15,14 @@ router.get("/", auth, async (req, res) => {
   }
 });
 
-// CREATE new promo
+// CREATE new promo (Admin only)
 router.post("/", auth, async (req, res) => {
   try {
     const { code, discountPercent, maxUses, expiryDate, description } =
       req.body;
 
     // Check if code already exists
-    const existingPromo = await Promo.findOne({ code });
+    const existingPromo = await Promo.findOne({ code: code.toUpperCase() });
     if (existingPromo) {
       return res.status(400).json({
         success: false,
@@ -29,7 +31,7 @@ router.post("/", auth, async (req, res) => {
     }
 
     const promo = new Promo({
-      code,
+      code: code.toUpperCase(),
       discountPercent,
       maxUses: maxUses || null,
       expiryDate: expiryDate || null,
@@ -43,7 +45,7 @@ router.post("/", auth, async (req, res) => {
   }
 });
 
-// UPDATE promo
+// UPDATE promo (Admin only)
 router.put("/:id", auth, async (req, res) => {
   try {
     const promo = await Promo.findById(req.params.id);
@@ -58,7 +60,7 @@ router.put("/:id", auth, async (req, res) => {
 
     // Check if code already exists (excluding current promo)
     const existingPromo = await Promo.findOne({
-      code,
+      code: code.toUpperCase(),
       _id: { $ne: req.params.id },
     });
     if (existingPromo) {
@@ -68,7 +70,7 @@ router.put("/:id", auth, async (req, res) => {
       });
     }
 
-    promo.code = code;
+    promo.code = code.toUpperCase();
     promo.discountPercent = discountPercent;
     promo.maxUses = maxUses || null;
     promo.expiryDate = expiryDate || null;
@@ -81,7 +83,7 @@ router.put("/:id", auth, async (req, res) => {
   }
 });
 
-// TOGGLE status
+// TOGGLE status (Admin only)
 router.patch("/:id/toggle", auth, async (req, res) => {
   try {
     const promo = await Promo.findById(req.params.id);
@@ -104,7 +106,7 @@ router.patch("/:id/toggle", auth, async (req, res) => {
   }
 });
 
-// DELETE promo
+// DELETE promo (Admin only)
 router.delete("/:id", auth, async (req, res) => {
   try {
     const promo = await Promo.findByIdAndDelete(req.params.id);
@@ -119,36 +121,51 @@ router.delete("/:id", auth, async (req, res) => {
   }
 });
 
-// VALIDATE promo code
-router.post("/validate", async (req, res) => {
+// ✅ VALIDATE PROMO - لكل المستخدمين
+router.post("/validate", auth, async (req, res) => {
   try {
     const { code } = req.body;
+    const userId = req.user._id; // ✅ من auth middleware
 
+    // البحث عن الـ promo
     const promo = await Promo.findOne({
       code: code.toUpperCase(),
       isActive: true,
     });
 
     if (!promo) {
-      return res.json({
+      return res.status(400).json({
         success: false,
-        message: "Promo code not found or inactive",
+        message: "كود الخصم غير صحيح أو غير مفعل",
       });
     }
 
-    // Check expiry date
+    // فحص تاريخ الانتهاء
     if (promo.expiryDate && new Date(promo.expiryDate) < new Date()) {
-      return res.json({
+      return res.status(400).json({
         success: false,
-        message: "Promo code expired",
+        message: "انتهت صلاحية كود الخصم",
       });
     }
 
-    // Check usage limit
+    // فحص عدد الاستخدامات الكلي
     if (promo.maxUses && promo.currentUses >= promo.maxUses) {
-      return res.json({
+      return res.status(400).json({
         success: false,
-        message: "Promo code usage limit reached",
+        message: "تم استهلاك كود الخصم بالكامل",
+      });
+    }
+
+    // ✅ فحص إذا كان اليوزر استخدمه من قبل
+    const user = await User.findById(userId);
+    const alreadyUsed = user.usedPromoCodes.some(
+      (used) => used.promoCode.toUpperCase() === code.toUpperCase()
+    );
+
+    if (alreadyUsed) {
+      return res.status(400).json({
+        success: false,
+        message: "لقد استخدمت هذا الكود من قبل",
       });
     }
 
@@ -157,10 +174,16 @@ router.post("/validate", async (req, res) => {
       promo: {
         code: promo.code,
         discountPercent: promo.discountPercent,
+        maxUses: promo.maxUses,
+        currentUses: promo.currentUses,
       },
     });
   } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
+    console.error("Promo validation error:", error);
+    res.status(500).json({
+      success: false,
+      message: "خطأ في الخادم",
+    });
   }
 });
 
