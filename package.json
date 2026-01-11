@@ -24,6 +24,7 @@
     "mongodb": "^7.0.0",
     "mongoose": "^9.1.2",
     "multer": "^2.0.2",
+    "node-cron": "^4.2.1",
     "nodemon": "^3.1.11",
     "passport": "^0.7.0",
     "passport-apple": "^2.0.2",
