@@ -69,6 +69,46 @@ app.use("/api/auth", authRoutes);
 app.use("/api/city-areas", cityAreaRoutes);
 app.use("/api/promos", promoRoute);
 
+app.post("/api/promos/:code/restore", async (req, res) => {
+  try {
+    const { code } = req.params;
+    const { orderId } = req.body;
+
+    // Import Promo model dynamically or at top
+    const Promo = mongoose.model("Promo") || require("./models/Promo");
+
+    const promo = await Promo.findOne({ code: code.toUpperCase() });
+    if (!promo) {
+      return res.status(404).json({ message: "Promo code not found" });
+    }
+
+    // Restore usage count
+    promo.usageCount = Math.max(0, promo.usageCount - 1);
+
+    // Remove user from usedBy if exists
+    if (promo.usedBy && req.user?.id) {
+      promo.usedBy = promo.usedBy.filter((userId) => userId !== req.user.id);
+    }
+
+    await promo.save();
+
+    console.log(
+      `✅ Promo ${code} restored after order ${orderId} cancellation`
+    );
+    res.json({
+      message: "Promo restored successfully",
+      promo: {
+        code: promo.code,
+        usageCount: promo.usageCount,
+        maxUses: promo.maxUses,
+      },
+    });
+  } catch (error) {
+    console.error("Promo restore error:", error);
+    res.status(500).json({ message: "Failed to restore promo" });
+  }
+});
+
 // ======== 404 Handler ========
 app.use((req, res, next) => {
   const error = new Error("This resource is not available");

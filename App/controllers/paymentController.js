@@ -22,12 +22,12 @@ exports.createMyFatoorahPayment = async (req, res) => {
     }
 
     const invoiceAmount = parseFloat(amount);
-    console.log(`✅ Payment: ${invoiceAmount} KWD`);
+    console.log(`✅ Payment: ${invoiceAmount} kw`);
 
     // Initiate
     const initiateRes = await axios.post(
       `${process.env.MYFATOORAH_BASE_URL}/v2/InitiatePayment`,
-      { InvoiceAmount: invoiceAmount, CurrencyIso: "KWD" },
+      { InvoiceAmount: invoiceAmount, CurrencyIso: "kw" },
       {
         headers: {
           Authorization: `Bearer ${process.env.MYFATOORAH_API_KEY}`,
