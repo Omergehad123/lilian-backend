@@ -20,7 +20,8 @@ const createOrder = asyncWrapper(async (req, res, next) => {
       shippingAddress,
       userInfo,
       promoCode,
-      promoDiscount, // ✅ جديد
+      promoDiscount,
+      specialInstructions,
     } = req.body;
 
     // التحقق من البيانات الأساسية
@@ -107,6 +108,7 @@ const createOrder = asyncWrapper(async (req, res, next) => {
           userInfo,
           promoCode: promoCode || null, // ✅ جديد
           promoDiscount: promoDiscount || 0, // ✅ جديد
+          specialInstructions: specialInstructions || null,
         },
       ],
       { session }
