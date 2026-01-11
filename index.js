@@ -57,14 +57,16 @@ const usersRouter = require("./route/users.route");
 const paymentRouter = require("./route/paymentRoutes");
 const orderRouter = require("./route/order.route");
 const authRoutes = require("./route/authRoutes");
-const cityAreaRoutes = require("./route/cityAreaRoutes"); // ✅ NEW ROUTE
+const cityAreaRoutes = require("./route/cityAreaRoutes");
+const promoRoute = require("./route/promos");
 
 app.use("/api/products", productsRouter);
 app.use("/api/users", usersRouter);
 app.use("/api/payment", paymentRouter);
 app.use("/api/orders", orderRouter);
 app.use("/api/auth", authRoutes);
-app.use("/api/city-areas", cityAreaRoutes); // ✅ ADDED CITY AREAS ROUTE
+app.use("/api/city-areas", cityAreaRoutes);
+app.use("/api/promos", promoRoute);
 
 // ======== 404 Handler ========
 app.use((req, res, next) => {
