@@ -2,57 +2,9 @@ const express = require("express");
 const router = express.Router();
 const userController = require("../App/controllers/usersController");
 const verifyToken = require("../App/middleware/verifyToken");
-const User = require("../App/models/users.model");
-const generateJWT = require("../utils/generateJWT");
-const httpStatusText = require("../utils/httpStatusText");
-const { v4: uuidv4 } = require("uuid");
-const userRoles = require("../utils/roles");
 
-router.post("/guest", async (req, res) => {
-  try {
-    const guestId = `guest_${uuidv4().slice(0, 8)}`;
-    const guestEmail = `${guestId}@guests.lilian.com`;
+router.post("/guest-login", userController.loginAsGuest);
 
-    let user = await User.findOne({
-      $or: [{ guestId }, { email: guestEmail }],
-    });
-
-    if (!user) {
-      user = new User({
-        firstName: "Guest",
-        lastName: "",
-        email: guestEmail,
-        password: null,
-        isGuest: true,
-        guestId: guestId,
-        role: userRoles.USER,
-        cart: [],
-      });
-      await user.save();
-    }
-
-    const token = await generateJWT({
-      id: user._id,
-      email: user.email,
-      role: user.role,
-      isGuest: true,
-    });
-
-    const { password, ...userWithoutPass } = user.toObject();
-    const userWithToken = { ...userWithoutPass, token };
-
-    res.json({
-      status: httpStatusText.SUCCESS,
-      data: { user: userWithToken },
-    });
-  } catch (error) {
-    console.error("Guest error:", error);
-    res.status(500).json({
-      status: "error",
-      message: "Guest login failed",
-    });
-  }
-});
 router.get("/", verifyToken, userController.getAllUser);
 
 router.get("/admin", verifyToken, userController.getAllUsersAdmin);

@@ -22,7 +22,6 @@ const getAllUser = asyncWrapper(async (req, res, next) => {
 const register = asyncWrapper(async (req, res, next) => {
   const { firstName, lastName, email, password, role } = req.body;
 
-  // ✅ Guests can't register
   if (!firstName || !lastName || !email || !password) {
     return next(new AppError("All fields are required", 400));
   }
@@ -38,7 +37,6 @@ const register = asyncWrapper(async (req, res, next) => {
     email,
     password: hashedPassword,
     role,
-    isGuest: false, // ✅ Explicitly not guest
   });
 
   const token = await generateJWT({
@@ -68,26 +66,6 @@ const login = asyncWrapper(async (req, res, next) => {
   const user = await User.findOne({ email });
   if (!user) return next(new AppError("Invalid Email or Password", 400));
 
-  // ✅ Skip password check for guests
-  if (user.isGuest) {
-    return res.json({
-      status: httpStatusText.SUCCESS,
-      data: {
-        user: {
-          ...user.toObject(),
-          token:
-            user.token ||
-            (await generateJWT({
-              id: user._id,
-              email: user.email,
-              role: user.role,
-              isGuest: true,
-            })),
-        },
-      },
-    });
-  }
-
   const matchedPass = await bcrypt.compare(password, user.password);
   if (!matchedPass) return next(new AppError("Invalid Email or Password", 400));
 
@@ -97,8 +75,8 @@ const login = asyncWrapper(async (req, res, next) => {
     role: user.role,
   });
 
-  const { password: pwd, ...userWithoutPass } = user.toObject();
-  const userWithToken = { ...userWithoutPass, token };
+  const { password: pwd, ...userWithoutPass } = user.toObject(); // remove password
+  const userWithToken = { ...userWithoutPass, token }; // attach token inside user object
 
   res.json({
     status: httpStatusText.SUCCESS,
@@ -207,23 +185,63 @@ const getAllUsersAdmin = asyncWrapper(async (req, res, next) => {
   });
 });
 
-const getMe = asyncWrapper(async (req, res, next) => {
-  try {
-    const user = await User.findById(req.user.id).select("-password");
-    res.json({
-      user: {
-        id: user._id,
-        firstName: user.firstName,
-        lastName: user.lastName,
-        email: user.email,
-        isGuest: user.isGuest, // ✅ Include guest status
-        role: user.role,
-      },
+const loginAsGuest = asyncWrapper(async (req, res, next) => {
+  // Generate unique guest ID (email-like format)
+  const guestEmail = `guest_${Date.now()}_${Math.random()
+    .toString(36)
+    .substr(2, 9)}@guest.com`;
+  const guestId = `guest_${Date.now()}`;
+
+  // Check if guest email already exists (unlikely but prevents duplicates)
+  let existingGuest = await User.findOne({ email: guestEmail });
+  if (existingGuest) {
+    // If exists, just return it
+    const { password, ...userWithoutPass } = existingGuest.toObject();
+    return res.json({
+      status: httpStatusText.SUCCESS,
+      data: { user: userWithoutPass },
     });
-  } catch (err) {
-    next(new AppError("Server error", 500));
   }
+
+  // Create new guest user
+  const newGuest = new User({
+    firstName: "Guest",
+    lastName: "",
+    email: guestEmail,
+    isGuest: true,
+    guestId: guestId,
+    role: userRoles.USER, // or whatever your default user role is
+    cart: [], // Empty cart for guest
+  });
+
+  // Generate JWT token for guest (no password needed)
+  const token = await generateJWT({
+    id: newGuest._id,
+    email: newGuest.email,
+    role: newGuest.role,
+    isGuest: true,
+  });
+
+  await newGuest.save();
+
+  const { password: pwd, ...userWithoutPass } = newGuest.toObject();
+  const userWithToken = { ...userWithoutPass, token };
+
+  res.status(201).json({
+    status: httpStatusText.SUCCESS,
+    data: { user: userWithToken },
+    message: "Logged in as guest successfully",
+  });
 });
+
+const getMe = async (req, res) => {
+  try {
+    const user = await User.findById(req.user._id).select("-password");
+    res.json({ user });
+  } catch (err) {
+    res.status(500).json({ message: "Server error" });
+  }
+};
 
 module.exports = {
   getAllUser,
@@ -235,4 +253,5 @@ module.exports = {
   removeFromCart,
   updateCartItem,
   getMe,
+  loginAsGuest,
 };

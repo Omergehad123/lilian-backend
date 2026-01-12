@@ -31,7 +31,6 @@ app.use("/api/payment/webhook", paymentRouter); // Raw webhook endpoint
 app.use(
   cors({
     origin: [
-      "https://diaa-sallam.com",
       "http://localhost:5173",
       "http://localhost:5174",
       "https://lilyandelarosekw.com",
@@ -52,23 +51,19 @@ app.set("trust proxy", 1);
 const cookieParser = require("cookie-parser");
 app.use(cookieParser());
 
-// Passport
-const passport = require("./utils/passport");
-app.use(passport.initialize());
-
 // ======== ALL ROUTES (AFTER middleware) ========
 const productsRouter = require("./route/products.route");
 const usersRouter = require("./route/users.route");
 const orderRouter = require("./route/order.route");
-const authRoutes = require("./route/authRoutes");
 const cityAreaRoutes = require("./route/cityAreaRoutes");
 const promoRoute = require("./route/promos");
 
+// === Remove any Google sign-in related code here - nothing present ===
+// All other routers
 app.use("/api/products", productsRouter);
 app.use("/api/users", usersRouter);
 app.use("/api/payment", paymentRouter); // Normal payment routes
 app.use("/api/orders", orderRouter);
-app.use("/api/auth", authRoutes);
 app.use("/api/city-areas", cityAreaRoutes);
 app.use("/api/promos", promoRoute);
 

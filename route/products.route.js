@@ -6,11 +6,9 @@ const verifyToken = require("../App/middleware/verifyToken");
 const allowTo = require("../App/middleware/allowTo");
 const userRoles = require("../utils/roles");
 
-// public
 router.get("/", productsController.getAllProducts);
 router.get("/:slug", productsController.getProduct);
 
-// protected
 router.post(
   "/",
   verifyToken,
@@ -31,6 +29,7 @@ router.patch(
   allowTo(userRoles.ADMIN, userRoles.MANAGER),
   productsController.updateProduct
 );
+
 router.patch(
   "/:id/availability",
   verifyToken,

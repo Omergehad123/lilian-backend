@@ -14,10 +14,10 @@ const createOrder = asyncWrapper(async (req, res, next) => {
   try {
     const {
       products,
-      subtotal, // ✅ NEW: Products subtotal
-      shippingCost, // ✅ NEW: Shipping cost
-      promoDiscount, // ✅ Discount amount (% or fixed)
-      totalAmount, // ✅ Final total
+      subtotal,
+      shippingCost,
+      promoDiscount,
+      totalAmount,
       orderType,
       scheduleTime,
       shippingAddress,
@@ -26,7 +26,7 @@ const createOrder = asyncWrapper(async (req, res, next) => {
       specialInstructions,
     } = req.body;
 
-    // ✅ Basic validation
+    // Basic validation
     if (!products || !products.length) {
       throw new AppError("No products provided", 400);
     }
@@ -43,12 +43,12 @@ const createOrder = asyncWrapper(async (req, res, next) => {
       throw new AppError("User info (name and phone) is required", 400);
     }
 
-    // ✅ Validate shipping cost based on order type
+    // Validate shipping cost based on order type
     if (orderType === "delivery" && (!shippingCost || shippingCost < 0)) {
       throw new AppError("Shipping cost required for delivery", 400);
     }
 
-    // ✅ Validate totals calculation
+    // Validate totals calculation
     const calculatedTotal =
       subtotal + (shippingCost || 0) - (promoDiscount || 0);
     if (Math.abs(totalAmount - calculatedTotal) > 0.01) {
@@ -60,7 +60,7 @@ const createOrder = asyncWrapper(async (req, res, next) => {
       );
     }
 
-    // ✅ Promo code validation
+    // Promo code validation
     if (promoCode && promoDiscount > 0) {
       const promo = await Promo.findOne({
         code: promoCode.toUpperCase(),
@@ -112,7 +112,7 @@ const createOrder = asyncWrapper(async (req, res, next) => {
       );
     }
 
-    // ✅ Create order with FULL financial breakdown
+    // Create order with FULL financial breakdown
     const order = await Order.create(
       [
         {

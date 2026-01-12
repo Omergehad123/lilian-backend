@@ -1,5 +1,3 @@
-const jwt = require("jsonwebtoken");
-
 const verifyToken = async (req, res, next) => {
   try {
     const authHeader = req.headers["authorization"];
@@ -9,23 +7,18 @@ const verifyToken = async (req, res, next) => {
     }
 
     const token = authHeader.split(" ")[1];
-
     if (!token) {
       return res.status(401).json("Token not found");
     }
 
     const currentUser = jwt.verify(token, process.env.JWT_SECRET_KEY);
 
-    // ✅ FIX: Ensure req.user has _id and role properties
     req.user = {
       _id: currentUser.id || currentUser._id,
       id: currentUser.id || currentUser._id,
       role: currentUser.role,
+      isGuest: currentUser.isGuest || false, // ✅ Add guest flag
     };
-
-    console.log("DECODED:", currentUser);
-    console.log("REQ.USER:", req.user);
-    console.log("USER ID:", req.user._id);
 
     next();
   } catch (err) {
