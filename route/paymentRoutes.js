@@ -1,16 +1,16 @@
+// routes/paymentRoutes.js
 const express = require("express");
 const router = express.Router();
 const PaymentController = require("../App/controllers/paymentController");
+const { protect } = require("../middleware/authMiddleware");
 
-// ✅ WEBHOOK - RAW JSON (no body parser)
+// In paymentRoutes.js
+router.post("/myfatoorah", protect, PaymentController.createMyFatoorahPayment);
 router.post(
   "/webhook/myfatoorah",
   express.raw({ type: "application/json" }),
   PaymentController.myFatoorahWebhook
 );
-
-// ✅ NORMAL PAYMENT ROUTES
-router.post("/myfatoorah", PaymentController.createMyFatoorahPayment);
-router.get("/status/:orderId", PaymentController.checkPaymentStatus);
+router.get("/status", protect, PaymentController.checkPaymentStatus);
 
 module.exports = router;

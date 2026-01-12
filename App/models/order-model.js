@@ -118,6 +118,19 @@ const orderSchema = new mongoose.Schema(
     specialInstructions: {
       type: String,
     },
+    paymentStatus: {
+      type: String,
+      enum: ["pending", "paid", "cancelled", "refunded"],
+      default: "pending",
+    },
+    paymentPending: {
+      type: Boolean,
+      default: false,
+    },
+    myfatoorahPaymentId: String,
+    myfatoorahInvoiceId: String,
+    paidAmount: Number,
+    paymentCompletedAt: Date,
   },
   { timestamps: true }
 );
