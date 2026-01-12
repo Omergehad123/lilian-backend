@@ -1,4 +1,4 @@
-// controllers/orderController.js
+// controllers/orderController.js - FULL ORDER CONTROLLER WITH SHIPPING COST
 const Order = require("../models/order-model");
 const User = require("../models/users.model");
 const Promo = require("../models/Promo");
@@ -14,17 +14,19 @@ const createOrder = asyncWrapper(async (req, res, next) => {
   try {
     const {
       products,
-      totalAmount,
+      subtotal, // ✅ NEW: Products subtotal
+      shippingCost, // ✅ NEW: Shipping cost
+      promoDiscount, // ✅ Discount amount (% or fixed)
+      totalAmount, // ✅ Final total
       orderType,
       scheduleTime,
       shippingAddress,
       userInfo,
       promoCode,
-      promoDiscount,
       specialInstructions,
     } = req.body;
 
-    // التحقق من البيانات الأساسية
+    // ✅ Basic validation
     if (!products || !products.length) {
       throw new AppError("No products provided", 400);
     }
@@ -41,29 +43,44 @@ const createOrder = asyncWrapper(async (req, res, next) => {
       throw new AppError("User info (name and phone) is required", 400);
     }
 
-    // ✅ التحقق من الـ promo code إذا موجود
+    // ✅ Validate shipping cost based on order type
+    if (orderType === "delivery" && (!shippingCost || shippingCost < 0)) {
+      throw new AppError("Shipping cost required for delivery", 400);
+    }
+
+    // ✅ Validate totals calculation
+    const calculatedTotal =
+      subtotal + (shippingCost || 0) - (promoDiscount || 0);
+    if (Math.abs(totalAmount - calculatedTotal) > 0.01) {
+      throw new AppError(
+        `Total mismatch. Expected: ${calculatedTotal.toFixed(
+          3
+        )}, Got: ${totalAmount.toFixed(3)}`,
+        400
+      );
+    }
+
+    // ✅ Promo code validation
     if (promoCode && promoDiscount > 0) {
       const promo = await Promo.findOne({
         code: promoCode.toUpperCase(),
         isActive: true,
-      });
+      }).session(session);
 
       if (!promo) {
         throw new AppError("Promo code not found or inactive", 400);
       }
 
-      // فحص تاريخ الانتهاء
       if (promo.expiryDate && new Date(promo.expiryDate) < new Date()) {
         throw new AppError("انتهت صلاحية كود الخصم", 400);
       }
 
-      // فحص عدد الاستخدامات الكلي
       if (promo.maxUses && promo.currentUses >= promo.maxUses) {
         throw new AppError("تم استهلاك كود الخصم بالكامل", 400);
       }
 
-      // ✅ فحص إذا كان اليوزر استخدمه من قبل
-      const user = await User.findById(req.user._id);
+      // Check if user used this promo before
+      const user = await User.findById(req.user._id).session(session);
       const alreadyUsed = user.usedPromoCodes.some(
         (used) => used.promoCode.toUpperCase() === promoCode.toUpperCase()
       );
@@ -72,7 +89,7 @@ const createOrder = asyncWrapper(async (req, res, next) => {
         throw new AppError("لقد استخدمت هذا الكود من قبل", 400);
       }
 
-      // ✅ حفظ الـ promo في اليوزر
+      // Save promo to user
       await User.findByIdAndUpdate(
         req.user._id,
         {
@@ -80,14 +97,14 @@ const createOrder = asyncWrapper(async (req, res, next) => {
             usedPromoCodes: {
               promoCode: promoCode.toUpperCase(),
               usedAt: new Date(),
-              orderId: null, // سيتم تحديثه لاحقاً
+              orderId: null,
             },
           },
         },
         { session }
       );
 
-      // ✅ تحديث currentUses في الـ promo
+      // Update promo usage
       await Promo.findOneAndUpdate(
         { code: promoCode.toUpperCase() },
         { $inc: { currentUses: 1 } },
@@ -95,19 +112,21 @@ const createOrder = asyncWrapper(async (req, res, next) => {
       );
     }
 
-    // إنشاء الطلب
+    // ✅ Create order with FULL financial breakdown
     const order = await Order.create(
       [
         {
           user: req.user._id,
           products,
+          subtotal,
+          shippingCost: shippingCost || 0,
+          promoCode: promoCode || null,
+          promoDiscount: promoDiscount || 0,
           totalAmount,
           orderType,
           scheduleTime,
           shippingAddress,
           userInfo,
-          promoCode: promoCode || null, // ✅ جديد
-          promoDiscount: promoDiscount || 0, // ✅ جديد
           specialInstructions: specialInstructions || null,
         },
       ],
@@ -116,7 +135,7 @@ const createOrder = asyncWrapper(async (req, res, next) => {
 
     const createdOrder = order[0];
 
-    // ✅ تحديث orderId في usedPromoCodes
+    // Update orderId in user's usedPromoCodes
     if (promoCode && promoDiscount > 0) {
       await User.findByIdAndUpdate(
         req.user._id,
@@ -134,7 +153,7 @@ const createOrder = asyncWrapper(async (req, res, next) => {
 
     await session.commitTransaction();
 
-    // Populate الطلب
+    // Populate order
     const populatedOrder = await Order.findById(createdOrder._id)
       .populate("products.product")
       .populate("user", "firstName lastName email");
@@ -151,7 +170,6 @@ const createOrder = asyncWrapper(async (req, res, next) => {
   }
 });
 
-// باقي الـ functions بدون تغيير
 const getOrders = asyncWrapper(async (req, res, next) => {
   const orders = await Order.find({ user: req.user._id })
     .populate("products.product")
@@ -181,14 +199,28 @@ const getOrder = asyncWrapper(async (req, res, next) => {
 });
 
 const getAllOrders = asyncWrapper(async (req, res, next) => {
-  const orders = await Order.find()
+  const { status, orderType, page = 1, limit = 20 } = req.query;
+
+  const query = {};
+  if (status) query.status = status;
+  if (orderType) query.orderType = orderType;
+
+  const skip = (page - 1) * limit;
+  const orders = await Order.find(query)
     .populate("products.product")
     .populate("user", "firstName lastName email")
-    .sort({ createdAt: -1 });
+    .sort({ createdAt: -1 })
+    .skip(skip)
+    .limit(limit);
+
+  const total = await Order.countDocuments(query);
 
   res.json({
     status: httpStatusText.SUCCESS,
     count: orders.length,
+    total,
+    page: parseInt(page),
+    pages: Math.ceil(total / limit),
     data: orders,
   });
 });
@@ -241,6 +273,30 @@ const deleteOrder = asyncWrapper(async (req, res, next) => {
   });
 });
 
+const getOrderStats = asyncWrapper(async (req, res, next) => {
+  const stats = await Order.aggregate([
+    {
+      $group: {
+        _id: null,
+        totalOrders: { $sum: 1 },
+        totalRevenue: { $sum: "$totalAmount" },
+        avgOrderValue: { $avg: "$totalAmount" },
+        deliveryOrders: {
+          $sum: { $cond: [{ $eq: ["$orderType", "delivery"] }, 1, 0] },
+        },
+        pickupOrders: {
+          $sum: { $cond: [{ $eq: ["$orderType", "pickup"] }, 1, 0] },
+        },
+      },
+    },
+  ]);
+
+  res.json({
+    status: httpStatusText.SUCCESS,
+    data: stats[0] || {},
+  });
+});
+
 module.exports = {
   createOrder,
   getOrders,
@@ -248,4 +304,5 @@ module.exports = {
   getAllOrders,
   updateOrderStatus,
   deleteOrder,
+  getOrderStats,
 };

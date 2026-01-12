@@ -112,6 +112,9 @@ const orderSchema = new mongoose.Schema(
       type: Number,
       default: 0,
     },
+    subtotal: { type: Number },
+    shippingCost: { type: Number },
+    totalAmount: { type: Number, required: true },
     specialInstructions: {
       type: String,
     },
