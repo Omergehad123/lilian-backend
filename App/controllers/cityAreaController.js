@@ -15,10 +15,27 @@ exports.addCity = async (req, res) => {
   try {
     const { key, name, areas } = req.body;
 
+    // ✅ VALIDATION - Fix the undefined error
+    if (!key || typeof key !== "string") {
+      return res.status(400).json({
+        success: false,
+        error: "City key is required and must be a string",
+      });
+    }
+
+    if (!name?.en || !name?.ar) {
+      return res.status(400).json({
+        success: false,
+        error: "City name (en and ar) is required",
+      });
+    }
+
+    const upperKey = key.toUpperCase().trim();
     const existingCity = await CityArea.findOne({
-      key: key.toUpperCase(),
+      key: upperKey,
       isActive: true,
     });
+
     if (existingCity) {
       return res.status(400).json({
         success: false,
@@ -27,7 +44,7 @@ exports.addCity = async (req, res) => {
     }
 
     const city = new CityArea({
-      key: key.toUpperCase(),
+      key: upperKey,
       name,
       areas: areas || [],
     });
@@ -81,10 +98,31 @@ exports.deleteCity = async (req, res) => {
 exports.addAreaToCity = async (req, res) => {
   try {
     const { cityId, name, shippingPrice } = req.body;
-    const city = await CityArea.findOne({ _id: cityId, isActive: true });
 
+    if (!cityId || !name?.en || !name?.ar || !shippingPrice) {
+      return res.status(400).json({
+        success: false,
+        error: "cityId, name (en/ar), and shippingPrice are required",
+      });
+    }
+
+    const city = await CityArea.findOne({ _id: cityId, isActive: true });
     if (!city) {
       return res.status(404).json({ success: false, error: "City not found" });
+    }
+
+    // ✅ Check duplicate areas
+    const existingArea = city.areas.find(
+      (area) =>
+        area.name.en.toLowerCase() === name.en.toLowerCase() ||
+        area.name.ar.toLowerCase() === name.ar.toLowerCase()
+    );
+
+    if (existingArea) {
+      return res.status(400).json({
+        success: false,
+        error: "Area already exists in this city",
+      });
     }
 
     city.areas.push({
