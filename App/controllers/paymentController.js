@@ -5,7 +5,6 @@ const createMyFatoorahPayment = async (req, res) => {
   try {
     console.log("📥 FULL REQUEST BODY:", JSON.stringify(req.body, null, 2));
 
-    // ✅ Handle BOTH frontend payload structures
     const amountRaw = req.body.amount || req.body.orderData?.totalAmount;
     const customerName =
       req.body.customerName || req.body.orderData?.userInfo?.name;
@@ -15,17 +14,10 @@ const createMyFatoorahPayment = async (req, res) => {
     const userId =
       req.body.userId || req.body.orderData?.user?._id || req.user?._id;
 
-    // ✅ STRICT VALIDATION
     if (!amountRaw || !customerName || !customerEmail) {
-      console.log("❌ MISSING:", {
-        amountRaw,
-        customerName,
-        customerEmail,
-        userId,
-      });
       return res.status(400).json({
         isSuccess: false,
-        message: `Missing: amount=${!!amountRaw}, name=${!!customerName}, email=${!!customerEmail}`,
+        message: `Missing required fields`,
       });
     }
 
@@ -33,22 +25,11 @@ const createMyFatoorahPayment = async (req, res) => {
     if (isNaN(amount) || amount <= 0) {
       return res.status(400).json({
         isSuccess: false,
-        message: `Invalid amount: ${amountRaw} → ${amount}`,
+        message: `Invalid amount: ${amountRaw}`,
       });
     }
 
-    console.log(`✅ VALIDATED: ${amount} KWD for ${customerName}`);
-
-    // ✅ Environment check
-    if (!process.env.MYFATOORAH_API_KEY) {
-      console.error("❌ NO API KEY in .env");
-      return res.status(500).json({
-        isSuccess: false,
-        message: "Payment gateway not configured",
-      });
-    }
-
-    // 1. INITIATE PAYMENT - GET ALL METHODS
+    // ✅ 1. ONLY InitiatePayment - NO ExecutePayment!
     const initiateRes = await axios.post(
       `${process.env.MYFATOORAH_BASE_URL}/v2/InitiatePayment`,
       {
@@ -64,145 +45,33 @@ const createMyFatoorahPayment = async (req, res) => {
       }
     );
 
-    console.log("✅ Initiate:", initiateRes.data.IsSuccess);
+    console.log("✅ Initiate Success:", initiateRes.data.IsSuccess);
     console.log(
       "Available methods:",
-      initiateRes.data.Data.PaymentMethods?.map((m) => m.PaymentMethodName)
+      initiateRes.data.Data.PaymentMethods?.length
     );
 
     if (!initiateRes.data.IsSuccess) {
       throw new Error(`Initiate failed: ${initiateRes.data.Message}`);
     }
 
-    // ✅ CHECK 1: Direct PaymentUrl (shows selection screen)
-    if (initiateRes.data.Data.PaymentUrl) {
-      console.log(
-        "✅ DIRECT PaymentUrl (selection screen):",
-        initiateRes.data.Data.PaymentUrl
-      );
-      return res.json({
-        isSuccess: true,
-        paymentUrl: initiateRes.data.Data.PaymentUrl,
-      });
+    // 🔥 RETURN PAYMENT URL DIRECTLY - Shows SELECTION SCREEN!
+    const paymentUrl = initiateRes.data.Data.PaymentUrl;
+    if (!paymentUrl) {
+      throw new Error("No PaymentUrl received from MyFatoorah");
     }
 
-    // ✅ CHECK 2: Find CARD payment method (VISA/Mastercard)
-    const cardMethods = initiateRes.data.Data.PaymentMethods?.filter(
-      (method) =>
-        method.PaymentMethodName?.toLowerCase().includes("card") ||
-        method.PaymentMethodName?.toLowerCase().includes("visa") ||
-        method.PaymentMethodName?.toLowerCase().includes("master") ||
-        method.PaymentMethodId === 2 || // Common card ID
-        method.PaymentMethodEntry === 2 // Card entry point
-    );
-
-    let paymentUrl;
-
-    if (cardMethods && cardMethods.length > 0) {
-      // ✅ PRIORITY: Execute with CARD method (direct to card form)
-      const cardMethodId = cardMethods[0].PaymentMethodId;
-      console.log(
-        "🎴 Using CARD method:",
-        cardMethods[0].PaymentMethodName,
-        cardMethodId
-      );
-
-      const executeRes = await axios.post(
-        `${process.env.MYFATOORAH_BASE_URL}/v2/ExecutePayment`,
-        {
-          PaymentMethodId: cardMethodId,
-          InvoiceValue: amount,
-          CustomerName: customerName,
-          CustomerEmail: customerEmail,
-          CustomerMobile: phone || "96500000000",
-          CallBackUrl: `${
-            process.env.FRONTEND_URL || "http://localhost:3000"
-          }/payment-success`,
-          ErrorUrl: `${
-            process.env.FRONTEND_URL || "http://localhost:3000"
-          }/payment-failed`,
-          NotificationOption: "ALL",
-          Lang: "en", // Shows English selection
-          DisplayCurrencyIso: "KWD",
-          UserDefinedField: JSON.stringify({
-            userId,
-            orderData: req.body.orderData || req.body,
-            invoiceId: initiateRes.data.Data.InvoiceId,
-          }),
-        },
-        {
-          headers: {
-            Authorization: `Bearer ${process.env.MYFATOORAH_API_KEY}`,
-            "Content-Type": "application/json",
-          },
-          timeout: 10000,
-        }
-      );
-
-      if (!executeRes.data.IsSuccess || !executeRes.data.Data.PaymentURL) {
-        console.error("❌ Execute failed:", executeRes.data);
-        throw new Error(`Execute failed: ${executeRes.data.Message}`);
-      }
-
-      paymentUrl = executeRes.data.Data.PaymentURL;
-      console.log("✅ CARD PaymentURL:", paymentUrl);
-    } else {
-      // ✅ FALLBACK: Use first available method (will show KNET but logs it)
-      const firstMethod = initiateRes.data.Data.PaymentMethods[0];
-      console.log(
-        "⚠️  No card methods, using first:",
-        firstMethod?.PaymentMethodName
-      );
-
-      const executeRes = await axios.post(
-        `${process.env.MYFATOORAH_BASE_URL}/v2/ExecutePayment`,
-        {
-          PaymentMethodId: firstMethod.PaymentMethodId,
-          InvoiceValue: amount,
-          CustomerName: customerName,
-          CustomerEmail: customerEmail,
-          CustomerMobile: phone || "96500000000",
-          CallBackUrl: `${
-            process.env.FRONTEND_URL || "http://localhost:3000"
-          }/payment-success`,
-          ErrorUrl: `${
-            process.env.FRONTEND_URL || "http://localhost:3000"
-          }/payment-failed`,
-          NotificationOption: "ALL",
-          Lang: "en",
-          UserDefinedField: JSON.stringify({
-            userId,
-            orderData: req.body.orderData || req.body,
-            invoiceId: initiateRes.data.Data.InvoiceId,
-          }),
-        },
-        {
-          headers: {
-            Authorization: `Bearer ${process.env.MYFATOORAH_API_KEY}`,
-            "Content-Type": "application/json",
-          },
-          timeout: 10000,
-        }
-      );
-
-      paymentUrl = executeRes.data.Data.PaymentURL;
-    }
+    console.log("🎯 SELECTION PAGE URL:", paymentUrl);
 
     res.json({
       isSuccess: true,
-      paymentUrl: paymentUrl,
+      paymentUrl: paymentUrl, // ✅ This shows VISA/KNET/ApplePay selection!
     });
   } catch (error) {
-    console.error("💥 DETAILED ERROR:", {
-      message: error.message,
-      status: error.response?.status,
-      data: error.response?.data,
-      config: error.config?.url,
-    });
-
+    console.error("💥 ERROR:", error.message);
     res.status(500).json({
       isSuccess: false,
-      message: error.response?.data?.Message || error.message,
+      message: error.message,
     });
   }
 };
