@@ -5,6 +5,7 @@ const AppError = require("../../utils/appError");
 const httpStatusText = require("../../utils/httpStatusText");
 const bcrypt = require("bcryptjs");
 const generateJWT = require("../../utils/generateJWT");
+const userRoles = require("../../utils/roles");
 
 const getAllUser = asyncWrapper(async (req, res, next) => {
   const users = await User.find().select("-password -cart -token"); // Include createdAt by default
@@ -192,10 +193,9 @@ const loginAsGuest = asyncWrapper(async (req, res, next) => {
     .substr(2, 9)}@guest.com`;
   const guestId = `guest_${Date.now()}`;
 
-  // Check if guest email already exists (unlikely but prevents duplicates)
+  // Check if guest email already exists
   let existingGuest = await User.findOne({ email: guestEmail });
   if (existingGuest) {
-    // If exists, just return it
     const { password, ...userWithoutPass } = existingGuest.toObject();
     return res.json({
       status: httpStatusText.SUCCESS,
@@ -210,11 +210,11 @@ const loginAsGuest = asyncWrapper(async (req, res, next) => {
     email: guestEmail,
     isGuest: true,
     guestId: guestId,
-    role: userRoles.USER, // or whatever your default user role is
-    cart: [], // Empty cart for guest
+    role: userRoles.USER, // ✅ Now this works!
+    cart: [],
   });
 
-  // Generate JWT token for guest (no password needed)
+  // Generate JWT token for guest
   const token = await generateJWT({
     id: newGuest._id,
     email: newGuest.email,
