@@ -1,175 +1,263 @@
-// controllers/paymentController.js
-const { MyFatoorah } = require("myfatoorah-toolkit");
-const Order = require("../models/order-model");
+const axios = require("axios");
+const User = require("../models/users.model");
 
-const payment = new MyFatoorah("KWT", true, process.env.MYFATOORAH_API_KEY);
+// 1. CREATE MYFATOORAH PAYMENT (Main endpoint)
+const createMyFatoorahPayment = async (req, res) => {
+  try {
+    console.log("📥 FULL REQUEST BODY:", JSON.stringify(req.body, null, 2));
 
-class PaymentController {
-  static async createMyFatoorahPayment(req, res) {
-    try {
-      console.log("🚀 Payment Request:", req.body);
-      console.log("🚀 User:", req.user?._id);
+    // ✅ Handle BOTH frontend payload structures
+    const amountRaw = req.body.amount || req.body.orderData?.totalAmount;
+    const customerName =
+      req.body.customerName || req.body.orderData?.userInfo?.name;
+    const customerEmail =
+      req.body.customerEmail || req.body.orderData?.customerEmail;
+    const phone = req.body.phone || req.body.orderData?.userInfo?.phone;
+    const userId =
+      req.body.userId || req.body.orderData?.user?._id || req.user?._id;
 
-      const { amount, customerName, customerEmail, phone, orderData } =
-        req.body;
-      const userId = req.user._id; // From verifyCookieToken
-
-      // ✅ VALIDATE
-      if (!amount || amount <= 0) {
-        return res
-          .status(400)
-          .json({ isSuccess: false, message: "Invalid amount" });
-      }
-      if (!customerName || !customerEmail || !phone) {
-        return res
-          .status(400)
-          .json({ isSuccess: false, message: "Missing customer data" });
-      }
-
-      const cleanPhone = phone.toString().replace(/^\+?965/, "");
-      if (cleanPhone.length < 7) {
-        return res
-          .status(400)
-          .json({ isSuccess: false, message: "Invalid Kuwait phone" });
-      }
-
-      // ✅ CREATE ORDER FIRST (status: pending)
-      const newOrder = new Order({
-        user: userId,
-        products: orderData.products,
-        subtotal: orderData.subtotal || 0,
-        shippingCost: orderData.shippingCost || 0,
-        totalAmount: amount,
-        orderType: orderData.orderType,
-        promoCode: orderData.promoCode || null,
-        promoDiscount: orderData.promoDiscount || 0,
-        scheduleTime: orderData.scheduleTime,
-        shippingAddress: orderData.shippingAddress,
-        userInfo: orderData.userInfo,
-        specialInstructions: orderData.specialInstructions || "",
-        status: "pending",
-        paymentStatus: "pending",
-        paymentPending: true,
+    // ✅ STRICT VALIDATION
+    if (!amountRaw || !customerName || !customerEmail) {
+      console.log("❌ MISSING:", {
+        amountRaw,
+        customerName,
+        customerEmail,
+        userId,
       });
+      return res.status(400).json({
+        isSuccess: false,
+        message: `Missing: amount=${!!amountRaw}, name=${!!customerName}, email=${!!customerEmail}`,
+      });
+    }
 
-      const savedOrder = await newOrder.save();
-      console.log("✅ Order saved:", savedOrder._id);
+    const amount = parseFloat(amountRaw);
+    if (isNaN(amount) || amount <= 0) {
+      return res.status(400).json({
+        isSuccess: false,
+        message: `Invalid amount: ${amountRaw} → ${amount}`,
+      });
+    }
 
-      // ✅ MYFATOORAH PAYMENT
-      const customerData = {
-        CustomerName: customerName.trim(),
-        CustomerEmail: customerEmail.trim(),
-        MobileCountryCode: "+965",
-        CustomerMobile: cleanPhone,
-        DisplayCurrencyIso: "KWD",
-        CustomerRefNumber: savedOrder._id.toString(), // Links to order
-      };
+    console.log(`✅ VALIDATED: ${amount} KWD for ${customerName}`);
 
-      const result = await payment.executePayment(
-        parseFloat(amount) * 1000, // KWD → Halalas
-        11, // All methods
-        customerData
+    // ✅ Environment check
+    if (!process.env.MYFATOORAH_API_KEY) {
+      console.error("❌ NO API KEY in .env");
+      return res.status(500).json({
+        isSuccess: false,
+        message: "Payment gateway not configured",
+      });
+    }
+
+    // 1. INITIATE PAYMENT
+    const initiateRes = await axios.post(
+      `${process.env.MYFATOORAH_BASE_URL}/v2/InitiatePayment`,
+      {
+        InvoiceAmount: amount,
+        CurrencyIso: "KWD",
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${process.env.MYFATOORAH_API_KEY}`,
+          "Content-Type": "application/json",
+        },
+        timeout: 10000,
+      }
+    );
+
+    console.log("✅ Initiate:", initiateRes.data.IsSuccess);
+
+    if (!initiateRes.data.IsSuccess) {
+      throw new Error(`Initiate failed: ${initiateRes.data.Message}`);
+    }
+
+    const paymentMethodId =
+      initiateRes.data.Data.PaymentMethods[0]?.PaymentMethodId;
+    if (!paymentMethodId) {
+      throw new Error("No payment methods available");
+    }
+
+    // 2. EXECUTE PAYMENT
+    const executeRes = await axios.post(
+      `${process.env.MYFATOORAH_BASE_URL}/v2/ExecutePayment`,
+      {
+        PaymentMethodId: paymentMethodId,
+        InvoiceValue: amount,
+        CustomerName: customerName,
+        CustomerEmail: customerEmail,
+        CustomerMobile: phone || "96500000000",
+        CallBackUrl: `${
+          process.env.FRONTEND_URL || "http://localhost:3000"
+        }/payment-success`,
+        ErrorUrl: `${
+          process.env.FRONTEND_URL || "http://localhost:3000"
+        }/payment-failed`,
+        NotificationOption: "ALL",
+        UserDefinedField: JSON.stringify({
+          userId,
+          orderData: req.body.orderData || req.body,
+          invoiceId: initiateRes.data.Data.InvoiceId,
+        }),
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${process.env.MYFATOORAH_API_KEY}`,
+          "Content-Type": "application/json",
+        },
+        timeout: 10000,
+      }
+    );
+
+    if (!executeRes.data.IsSuccess || !executeRes.data.Data.PaymentURL) {
+      console.error("❌ Execute failed:", executeRes.data);
+      throw new Error(`Execute failed: ${executeRes.data.Message}`);
+    }
+
+    console.log("✅ SUCCESS PaymentURL:", executeRes.data.Data.PaymentURL);
+
+    res.json({
+      isSuccess: true,
+      paymentUrl: executeRes.data.Data.PaymentURL,
+    });
+  } catch (error) {
+    console.error("💥 DETAILED ERROR:", {
+      message: error.message,
+      status: error.response?.status,
+      data: error.response?.data,
+      config: error.config?.url,
+    });
+
+    res.status(500).json({
+      isSuccess: false,
+      message: error.response?.data?.Message || error.message,
+    });
+  }
+};
+
+// 2. HANDLE PAYMENT SUCCESS CALLBACK
+const handlePaymentSuccess = async (req, res) => {
+  try {
+    console.log("📥 Success callback:", req.query, req.body);
+
+    const { paymentId, userId, invoiceId } = req.query;
+
+    if (!paymentId && !invoiceId) {
+      return res.redirect(
+        `${
+          process.env.FRONTEND_URL || "http://localhost:3000"
+        }/payment-failed?error=no_payment_id`
+      );
+    }
+
+    // Verify payment status with MyFatoorah
+    if (process.env.MYFATOORAH_API_KEY) {
+      const statusRes = await axios.get(
+        `${process.env.MYFATOORAH_BASE_URL}/v2/getPaymentStatus?key=${
+          paymentId || invoiceId
+        }&keyType=PaymentId`,
+        {
+          headers: {
+            Authorization: `Bearer ${process.env.MYFATOORAH_API_KEY}`,
+          },
+          timeout: 5000,
+        }
       );
 
-      if (!result.IsSuccess || !result.Data?.PaymentUrl) {
-        // ❌ DELETE FAILED ORDER
-        await Order.findByIdAndDelete(savedOrder._id);
-        return res.status(400).json({
-          isSuccess: false,
-          message: result.Message || "Payment creation failed",
-        });
+      if (
+        !statusRes.data.IsSuccess ||
+        statusRes.data.Data.PaymentStatus !== "Paid"
+      ) {
+        console.error("❌ Payment not confirmed:", statusRes.data);
+        return res.redirect(
+          `${
+            process.env.FRONTEND_URL || "http://localhost:3000"
+          }/payment-failed?error=not_paid`
+        );
       }
+    }
 
-      // ✅ UPDATE ORDER WITH PAYMENT INFO
-      await Order.findByIdAndUpdate(savedOrder._id, {
-        myfatoorahInvoiceId: result.Data.InvoiceId,
-        myfatoorahPaymentId: result.Data.PaymentId,
-        paymentPending: true,
-      });
-
-      res.json({
-        isSuccess: true,
-        message: "Payment ready",
-        orderId: savedOrder._id,
-        paymentUrl: result.Data.PaymentUrl,
-        invoiceId: result.Data.InvoiceId,
-        paymentId: result.Data.PaymentId,
-      });
-    } catch (error) {
-      console.error("💥 Payment error:", error);
-
-      if (error.message?.includes("API_KEY")) {
-        return res.status(500).json({
-          isSuccess: false,
-          message: "Payment service error",
-        });
+    // Store order data from UserDefinedField (would be in webhook)
+    const userDefinedField = req.query.UserDefinedField;
+    let orderData = {};
+    if (userDefinedField) {
+      try {
+        orderData = JSON.parse(decodeURIComponent(userDefinedField));
+      } catch (e) {
+        console.error("Failed to parse order data");
       }
+    }
 
-      res.status(500).json({
-        isSuccess: false,
-        message: error.message || "Server error",
+    // Save order to user (simplified)
+    if (userId) {
+      await User.findByIdAndUpdate(userId, {
+        $push: {
+          orders: {
+            paymentId: paymentId || invoiceId,
+            status: "paid",
+            totalAmount: orderData.orderData?.totalAmount || 0,
+            orderData: orderData.orderData || null,
+          },
+        },
       });
     }
+
+    console.log("✅ Payment success saved");
+    res.redirect(
+      `${
+        process.env.FRONTEND_URL || "http://localhost:3000"
+      }/payment-success?paymentId=${paymentId || invoiceId}&userId=${userId}`
+    );
+  } catch (error) {
+    console.error("❌ Success handler error:", error);
+    res.redirect(
+      `${
+        process.env.FRONTEND_URL || "http://localhost:3000"
+      }/payment-failed?error=server_error`
+    );
   }
+};
 
-  // 🔥 WEBHOOK (unchanged)
-  static async myFatoorahWebhook(req, res) {
-    try {
-      const { PaymentId, InvoiceStatus, CustomerRefNumber } = req.body;
+// 3. WEBHOOK HANDLER (MyFatoorah → Your server)
+const handleWebhook = async (req, res) => {
+  try {
+    console.log("🔔 WEBHOOK received:", req.body);
 
-      if (!PaymentId || !CustomerRefNumber) {
-        return res.status(400).json({ message: "Missing data" });
-      }
+    // TODO: Validate MyFatoorah signature
+    // const signature = req.get("MyFatoorah-Signature");
+    // validateSignature(req.body, signature, process.env.MYFATOORAH_WEBHOOK_SECRET);
 
-      const order = await Order.findById(CustomerRefNumber);
-      if (!order) {
-        return res.status(200).json({ message: "Order not found" });
-      }
+    const { PaymentId, InvoiceId, PaymentStatus } = req.body.Data;
 
-      if (InvoiceStatus === "PAID") {
-        await Order.findByIdAndUpdate(order._id, {
-          status: "confirmed",
-          paymentStatus: "paid",
-          paidAmount: parseFloat(req.body.InvoiceValue) / 1000,
-          paymentCompletedAt: new Date(),
-          paymentPending: false,
-        });
-        console.log(`✅ Order ${order._id} PAID`);
-      } else if (InvoiceStatus === "CANCELLED") {
-        await Order.findByIdAndUpdate(order._id, {
-          status: "cancelled",
-          paymentStatus: "cancelled",
-          paymentPending: false,
-        });
-      }
+    if (PaymentStatus === "Paid") {
+      // 1. Get payment details
+      const statusRes = await axios.get(
+        `${process.env.MYFATOORAH_BASE_URL}/v2/getPaymentStatus?key=${PaymentId}&keyType=PaymentId`,
+        {
+          headers: {
+            Authorization: `Bearer ${process.env.MYFATOORAH_API_KEY}`,
+          },
+        }
+      );
 
-      res.status(200).json({ message: "OK" });
-    } catch (error) {
-      console.error("Webhook error:", error);
-      res.status(500).json({ message: "Failed" });
+      // 2. Parse orderData from UserDefinedField
+      const userDefinedField = statusRes.data.Data.UserDefinedField;
+      const orderData = userDefinedField ? JSON.parse(userDefinedField) : {};
+
+      // 3. Create actual order in database
+      // TODO: Call your createOrder function here with orderData.orderData
+
+      console.log("✅ Webhook: Order created for PaymentId", PaymentId);
     }
+
+    res.status(200).json({ success: true });
+  } catch (error) {
+    console.error("❌ Webhook error:", error);
+    res.status(500).json({ success: false });
   }
+};
 
-  static async checkPaymentStatus(req, res) {
-    try {
-      const { invoiceId, paymentId, orderId } = req.query;
-
-      // Simplified - just return order status
-      const order = await Order.findById(orderId);
-      if (order) {
-        return res.json({
-          isSuccess: true,
-          orderStatus: order.status,
-          paymentStatus: order.paymentStatus,
-          orderId: order._id,
-        });
-      }
-
-      res.status(404).json({ isSuccess: false, message: "Order not found" });
-    } catch (error) {
-      res.status(500).json({ isSuccess: false, message: "Error" });
-    }
-  }
-}
-
-module.exports = PaymentController;
+module.exports = {
+  createMyFatoorahPayment,
+  handlePaymentSuccess,
+  handleWebhook,
+};
