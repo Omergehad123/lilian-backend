@@ -72,10 +72,10 @@ const createMyFatoorahPayment = async (req, res) => {
         CustomerMobile: phone,
         CallBackUrl: `${
           process.env.FRONTEND_URL || "https://lilyandelarosekw.com"
-        }/payment-success`,
+        }payment-success`,
         ErrorUrl: `${
           process.env.FRONTEND_URL || "https://lilyandelarosekw.com"
-        }/payment-failed`,
+        }payment-failed`,
         NotificationOption: "ALL",
         Lang: "en",
         DisplayCurrencyIso: "KWD",
@@ -130,7 +130,6 @@ const createMyFatoorahPayment = async (req, res) => {
   }
 };
 
-// Keep other functions unchanged
 const handlePaymentSuccess = async (req, res) => {
   try {
     console.log("📥 SUCCESS CALLBACK:", req.query);
