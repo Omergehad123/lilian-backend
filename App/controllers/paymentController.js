@@ -1,5 +1,5 @@
 const { MyFatoorah } = require("myfatoorah-toolkit");
-const Order = require("../models/Order");
+const Order = require("../models/order-model");
 
 const payment = new MyFatoorah("KWT", true, process.env.MYFATOORAH_API_KEY);
 

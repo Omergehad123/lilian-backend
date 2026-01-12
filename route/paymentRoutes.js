@@ -1,6 +1,6 @@
 const express = require("express");
 const router = express.Router();
-const PaymentController = require("../controllers/paymentController");
+const PaymentController = require("../App/controllers/paymentController");
 
 // ✅ WEBHOOK - RAW JSON (no body parser)
 router.post(
