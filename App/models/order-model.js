@@ -120,13 +120,10 @@ const orderSchema = new mongoose.Schema(
     },
     paymentStatus: {
       type: String,
-      enum: ["pending", "paid", "cancelled", "refunded"],
+      enum: ["pending", "paid", "cancelled"],
       default: "pending",
     },
-    paymentPending: {
-      type: Boolean,
-      default: false,
-    },
+    paymentPending: { type: Boolean, default: false },
     myfatoorahPaymentId: String,
     myfatoorahInvoiceId: String,
     paidAmount: Number,
