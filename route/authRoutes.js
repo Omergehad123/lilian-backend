@@ -12,37 +12,43 @@ router.get(
   passport.authenticate("google", { scope: ["profile", "email"] })
 );
 
-// Google OAuth CALLBACK - FIXED
 router.get(
   "/google/callback",
   passport.authenticate("google", {
     session: false,
-    failureRedirect: `${FRONTEND_URL}/login`,
+    failureRedirect: `${FRONTEND_URL}/login?error=google_auth_failed`,
   }),
   (req, res) => {
-    console.log("✅ GOOGLE CALLBACK REACHED!"); // ← ADD THIS
-    console.log("req.user:", req.user); // ← ADD THIS
+    console.log("✅ GOOGLE CALLBACK REACHED!");
+    console.log("req.user:", req.user);
 
     if (!req.user || !req.user.token) {
       console.log("❌ NO USER/TOKEN - PROBLEM!");
-      return res.redirect(`${FRONTEND_URL}/login`);
+      return res.redirect(`${FRONTEND_URL}/login?error=no_token`);
     }
 
+    // ✅ Set JWT cookie
     res.cookie("token", req.user.token, {
       httpOnly: true,
-      secure: true, // Render = HTTPS
-      sameSite: "none", // Cross-site cookies
-      maxAge: 7 * 24 * 60 * 60 * 1000,
+      secure: process.env.NODE_ENV === "production", // HTTPS only in prod
+      sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
+      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
     });
 
-    console.log("✅ Cookie set, redirecting..."); // ← ADD THIS
-    res.redirect(`${FRONTEND_URL}/`);
+    console.log("✅ Cookie set");
+
+    // ✅ GET RETURN URL FROM QUERY PARAMS (sent from frontend)
+    const returnUrl = req.query.returnUrl || "/";
+
+    console.log("🔄 Redirecting to:", decodeURIComponent(returnUrl));
+
+    // ✅ Redirect to wherever user came from
+    res.redirect(decodeURIComponent(returnUrl));
   }
 );
 
-// ✅ NEW: Get current user (for frontend)
 router.get("/me", (req, res) => {
-  console.log("🍪 Cookies received:", req.cookies); // ← ADD THIS
+  console.log("🍪 Cookies received:", req.cookies);
   const token = req.cookies.token;
 
   if (!token) {
@@ -50,14 +56,10 @@ router.get("/me", (req, res) => {
     return res.status(401).json({ error: "No token" });
   }
 
-  if (!token) {
-    return res.status(401).json({ error: "No token" });
-  }
-
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET_KEY);
     User.findById(decoded.id)
-      .select("-password") // Don't send password
+      .select("-password")
       .then((user) => {
         if (!user) {
           return res.status(401).json({ error: "User not found" });
