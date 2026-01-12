@@ -3,17 +3,21 @@ const router = express.Router();
 
 const verifyCookieToken = require("../App/middleware/verifyCookieToken");
 
+// ✅ فقط الـ function المتاح
 const {
   createMyFatoorahPayment,
-  handlePaymentSuccess,
 } = require("../App/controllers/paymentController");
 
 console.log("✅ Middleware loaded:", typeof verifyCookieToken === "function");
+console.log(
+  "✅ createMyFatoorahPayment loaded:",
+  typeof createMyFatoorahPayment === "function"
+);
 
-router.post("/myfatoorah", verifyCookieToken, createMyFatoorahPayment);
-router.post("/success", verifyCookieToken, handlePaymentSuccess);
-
+// ✅ Route واحد بس دلوقتي
 router.post("/myfatoorah/initiate", verifyCookieToken, createMyFatoorahPayment);
-router.post("/myfatoorah/execute", verifyCookieToken, executeSelectedPayment);
+
+// ✅ للتوافق مع الكود القديم
+router.post("/myfatoorah", verifyCookieToken, createMyFatoorahPayment);
 
 module.exports = router;
