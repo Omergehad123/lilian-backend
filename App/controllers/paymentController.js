@@ -1,6 +1,6 @@
 // controllers/paymentController.js
 const { MyFatoorah } = require("myfatoorah-toolkit");
-const Order = require("../models/Order"); // Your Order model
+const Order = require("../models/order-model"); // Your Order model
 
 // Initialize MyFatoorah (Kuwait Test Mode)
 const payment = new MyFatoorah("KWT", true, process.env.MYFATOORAH_API_KEY);

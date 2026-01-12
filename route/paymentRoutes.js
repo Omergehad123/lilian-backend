@@ -2,15 +2,21 @@
 const express = require("express");
 const router = express.Router();
 const PaymentController = require("../App/controllers/paymentController");
-const { protect } = require("../middleware/authMiddleware");
+const verifyCookieToken = require("../App/middleware/verifyCookieToken"); // ✅ COOKIE AUTH
 
-// In paymentRoutes.js
-router.post("/myfatoorah", protect, PaymentController.createMyFatoorahPayment);
+// 🔥 COOKIE AUTH - Matches your frontend fetch
+router.post(
+  "/myfatoorah",
+  verifyCookieToken,
+  PaymentController.createMyFatoorahPayment
+);
+router.get("/status", verifyCookieToken, PaymentController.checkPaymentStatus);
+
+// 🔥 WEBHOOK - PUBLIC (MyFatoorah posts here)
 router.post(
   "/webhook/myfatoorah",
   express.raw({ type: "application/json" }),
   PaymentController.myFatoorahWebhook
 );
-router.get("/status", protect, PaymentController.checkPaymentStatus);
 
 module.exports = router;
