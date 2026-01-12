@@ -22,13 +22,11 @@ mongoose
   .then(() => console.log("✅ Connected to MongoDB"))
   .catch((err) => console.error("❌ MongoDB connection error:", err));
 
-// ======== Middleware ========
-// Parse JSON
-app.use(express.json());
+// ======== CRITICAL: WEBHOOK ROUTES FIRST (BEFORE JSON PARSER) ========
+const paymentRouter = require("./route/paymentRoutes"); // Load payment routes early
+app.use("/api/payment/webhook", paymentRouter); // Raw webhook endpoint
 
-// Serve uploads
-app.use("/Uploads", express.static(path.join(__dirname, "Uploads")));
-
+// ======== Middleware (AFTER webhook) ========
 // CORS setup
 app.use(
   cors({
@@ -42,20 +40,25 @@ app.use(
   })
 );
 
+// Parse JSON (AFTER webhook)
+app.use(express.json({ limit: "10mb" }));
+app.use(express.urlencoded({ extended: true }));
+
+// Static files
+app.use("/Uploads", express.static(path.join(__dirname, "Uploads")));
 app.set("trust proxy", 1);
 
-// ======== PASSPORT (NO SESSION for JWT) ========
-const passport = require("./utils/passport");
-app.use(passport.initialize());
-// ✅ REMOVED: app.use(passport.session()); // No sessions for JWT
-
+// Cookie parser
 const cookieParser = require("cookie-parser");
 app.use(cookieParser());
 
-// ======== ROUTES ========
+// Passport
+const passport = require("./utils/passport");
+app.use(passport.initialize());
+
+// ======== ALL ROUTES (AFTER middleware) ========
 const productsRouter = require("./route/products.route");
 const usersRouter = require("./route/users.route");
-const paymentRouter = require("./route/paymentRoutes");
 const orderRouter = require("./route/order.route");
 const authRoutes = require("./route/authRoutes");
 const cityAreaRoutes = require("./route/cityAreaRoutes");
@@ -63,29 +66,25 @@ const promoRoute = require("./route/promos");
 
 app.use("/api/products", productsRouter);
 app.use("/api/users", usersRouter);
-app.use("/api/payment", paymentRouter);
+app.use("/api/payment", paymentRouter); // Normal payment routes
 app.use("/api/orders", orderRouter);
 app.use("/api/auth", authRoutes);
 app.use("/api/city-areas", cityAreaRoutes);
 app.use("/api/promos", promoRoute);
 
+// Promo restore endpoint
 app.post("/api/promos/:code/restore", async (req, res) => {
   try {
     const { code } = req.params;
     const { orderId } = req.body;
 
-    // Import Promo model dynamically or at top
-    const Promo = mongoose.model("Promo") || require("./models/Promo");
-
+    const Promo = mongoose.model("Promo");
     const promo = await Promo.findOne({ code: code.toUpperCase() });
     if (!promo) {
       return res.status(404).json({ message: "Promo code not found" });
     }
 
-    // Restore usage count
     promo.usageCount = Math.max(0, promo.usageCount - 1);
-
-    // Remove user from usedBy if exists
     if (promo.usedBy && req.user?.id) {
       promo.usedBy = promo.usedBy.filter((userId) => userId !== req.user.id);
     }
@@ -130,4 +129,7 @@ app.use((error, req, res, next) => {
 // ======== Start Server ========
 app.listen(PORT, () => {
   console.log(`🚀 Server running on port ${PORT}`);
+  console.log(
+    `📝 Webhook ready: http://localhost:${PORT}/api/payment/webhook/myfatoorah`
+  );
 });

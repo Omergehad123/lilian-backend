@@ -1,16 +1,16 @@
 const express = require("express");
 const router = express.Router();
+const PaymentController = require("../controllers/paymentController");
 
-const verifyCookieToken = require("../App/middleware/verifyCookieToken");
+// ✅ WEBHOOK - RAW JSON (no body parser)
+router.post(
+  "/webhook/myfatoorah",
+  express.raw({ type: "application/json" }),
+  PaymentController.myFatoorahWebhook
+);
 
-const {
-  createMyFatoorahPayment,
-  handlePaymentSuccess,
-} = require("../App/controllers/paymentController");
-
-console.log("✅ Middleware loaded:", typeof verifyCookieToken === "function");
-
-router.post("/myfatoorah", verifyCookieToken, createMyFatoorahPayment);
-router.post("/success", verifyCookieToken, handlePaymentSuccess);
+// ✅ NORMAL PAYMENT ROUTES
+router.post("/myfatoorah", PaymentController.createMyFatoorahPayment);
+router.get("/status/:orderId", PaymentController.checkPaymentStatus);
 
 module.exports = router;
