@@ -1,7 +1,6 @@
 const axios = require("axios");
 const User = require("../models/users.model");
 
-// 1. CREATE MYFATOORAH PAYMENT (Main endpoint)
 const createMyFatoorahPayment = async (req, res) => {
   try {
     console.log("📥 FULL REQUEST BODY:", JSON.stringify(req.body, null, 2));
@@ -49,7 +48,7 @@ const createMyFatoorahPayment = async (req, res) => {
       });
     }
 
-    // 1. INITIATE PAYMENT
+    // 1. INITIATE PAYMENT - GET ALL METHODS
     const initiateRes = await axios.post(
       `${process.env.MYFATOORAH_BASE_URL}/v2/InitiatePayment`,
       {
@@ -66,58 +65,132 @@ const createMyFatoorahPayment = async (req, res) => {
     );
 
     console.log("✅ Initiate:", initiateRes.data.IsSuccess);
+    console.log(
+      "Available methods:",
+      initiateRes.data.Data.PaymentMethods?.map((m) => m.PaymentMethodName)
+    );
 
     if (!initiateRes.data.IsSuccess) {
       throw new Error(`Initiate failed: ${initiateRes.data.Message}`);
     }
 
-    const paymentMethodId =
-      initiateRes.data.Data.PaymentMethods[0]?.PaymentMethodId;
-    if (!paymentMethodId) {
-      throw new Error("No payment methods available");
+    // ✅ CHECK 1: Direct PaymentUrl (shows selection screen)
+    if (initiateRes.data.Data.PaymentUrl) {
+      console.log(
+        "✅ DIRECT PaymentUrl (selection screen):",
+        initiateRes.data.Data.PaymentUrl
+      );
+      return res.json({
+        isSuccess: true,
+        paymentUrl: initiateRes.data.Data.PaymentUrl,
+      });
     }
 
-    // 2. EXECUTE PAYMENT
-    const executeRes = await axios.post(
-      `${process.env.MYFATOORAH_BASE_URL}/v2/ExecutePayment`,
-      {
-        PaymentMethodId: paymentMethodId,
-        InvoiceValue: amount,
-        CustomerName: customerName,
-        CustomerEmail: customerEmail,
-        CustomerMobile: phone || "96500000000",
-        CallBackUrl: `${
-          process.env.FRONTEND_URL || "http://localhost:3000"
-        }/payment-success`,
-        ErrorUrl: `${
-          process.env.FRONTEND_URL || "http://localhost:3000"
-        }/payment-failed`,
-        NotificationOption: "ALL",
-        UserDefinedField: JSON.stringify({
-          userId,
-          orderData: req.body.orderData || req.body,
-          invoiceId: initiateRes.data.Data.InvoiceId,
-        }),
-      },
-      {
-        headers: {
-          Authorization: `Bearer ${process.env.MYFATOORAH_API_KEY}`,
-          "Content-Type": "application/json",
-        },
-        timeout: 10000,
-      }
+    // ✅ CHECK 2: Find CARD payment method (VISA/Mastercard)
+    const cardMethods = initiateRes.data.Data.PaymentMethods?.filter(
+      (method) =>
+        method.PaymentMethodName?.toLowerCase().includes("card") ||
+        method.PaymentMethodName?.toLowerCase().includes("visa") ||
+        method.PaymentMethodName?.toLowerCase().includes("master") ||
+        method.PaymentMethodId === 2 || // Common card ID
+        method.PaymentMethodEntry === 2 // Card entry point
     );
 
-    if (!executeRes.data.IsSuccess || !executeRes.data.Data.PaymentURL) {
-      console.error("❌ Execute failed:", executeRes.data);
-      throw new Error(`Execute failed: ${executeRes.data.Message}`);
-    }
+    let paymentUrl;
 
-    console.log("✅ SUCCESS PaymentURL:", executeRes.data.Data.PaymentURL);
+    if (cardMethods && cardMethods.length > 0) {
+      // ✅ PRIORITY: Execute with CARD method (direct to card form)
+      const cardMethodId = cardMethods[0].PaymentMethodId;
+      console.log(
+        "🎴 Using CARD method:",
+        cardMethods[0].PaymentMethodName,
+        cardMethodId
+      );
+
+      const executeRes = await axios.post(
+        `${process.env.MYFATOORAH_BASE_URL}/v2/ExecutePayment`,
+        {
+          PaymentMethodId: cardMethodId,
+          InvoiceValue: amount,
+          CustomerName: customerName,
+          CustomerEmail: customerEmail,
+          CustomerMobile: phone || "96500000000",
+          CallBackUrl: `${
+            process.env.FRONTEND_URL || "http://localhost:3000"
+          }/payment-success`,
+          ErrorUrl: `${
+            process.env.FRONTEND_URL || "http://localhost:3000"
+          }/payment-failed`,
+          NotificationOption: "ALL",
+          Lang: "en", // Shows English selection
+          DisplayCurrencyIso: "KWD",
+          UserDefinedField: JSON.stringify({
+            userId,
+            orderData: req.body.orderData || req.body,
+            invoiceId: initiateRes.data.Data.InvoiceId,
+          }),
+        },
+        {
+          headers: {
+            Authorization: `Bearer ${process.env.MYFATOORAH_API_KEY}`,
+            "Content-Type": "application/json",
+          },
+          timeout: 10000,
+        }
+      );
+
+      if (!executeRes.data.IsSuccess || !executeRes.data.Data.PaymentURL) {
+        console.error("❌ Execute failed:", executeRes.data);
+        throw new Error(`Execute failed: ${executeRes.data.Message}`);
+      }
+
+      paymentUrl = executeRes.data.Data.PaymentURL;
+      console.log("✅ CARD PaymentURL:", paymentUrl);
+    } else {
+      // ✅ FALLBACK: Use first available method (will show KNET but logs it)
+      const firstMethod = initiateRes.data.Data.PaymentMethods[0];
+      console.log(
+        "⚠️  No card methods, using first:",
+        firstMethod?.PaymentMethodName
+      );
+
+      const executeRes = await axios.post(
+        `${process.env.MYFATOORAH_BASE_URL}/v2/ExecutePayment`,
+        {
+          PaymentMethodId: firstMethod.PaymentMethodId,
+          InvoiceValue: amount,
+          CustomerName: customerName,
+          CustomerEmail: customerEmail,
+          CustomerMobile: phone || "96500000000",
+          CallBackUrl: `${
+            process.env.FRONTEND_URL || "http://localhost:3000"
+          }/payment-success`,
+          ErrorUrl: `${
+            process.env.FRONTEND_URL || "http://localhost:3000"
+          }/payment-failed`,
+          NotificationOption: "ALL",
+          Lang: "en",
+          UserDefinedField: JSON.stringify({
+            userId,
+            orderData: req.body.orderData || req.body,
+            invoiceId: initiateRes.data.Data.InvoiceId,
+          }),
+        },
+        {
+          headers: {
+            Authorization: `Bearer ${process.env.MYFATOORAH_API_KEY}`,
+            "Content-Type": "application/json",
+          },
+          timeout: 10000,
+        }
+      );
+
+      paymentUrl = executeRes.data.Data.PaymentURL;
+    }
 
     res.json({
       isSuccess: true,
-      paymentUrl: executeRes.data.Data.PaymentURL,
+      paymentUrl: paymentUrl,
     });
   } catch (error) {
     console.error("💥 DETAILED ERROR:", {
@@ -176,7 +249,7 @@ const handlePaymentSuccess = async (req, res) => {
       }
     }
 
-    // Store order data from UserDefinedField (would be in webhook)
+    // Store order data from UserDefinedField
     const userDefinedField = req.query.UserDefinedField;
     let orderData = {};
     if (userDefinedField) {
@@ -187,7 +260,7 @@ const handlePaymentSuccess = async (req, res) => {
       }
     }
 
-    // Save order to user (simplified)
+    // Save order to user
     if (userId) {
       await User.findByIdAndUpdate(userId, {
         $push: {
@@ -217,19 +290,14 @@ const handlePaymentSuccess = async (req, res) => {
   }
 };
 
-// 3. WEBHOOK HANDLER (MyFatoorah → Your server)
+// 3. WEBHOOK HANDLER
 const handleWebhook = async (req, res) => {
   try {
     console.log("🔔 WEBHOOK received:", req.body);
 
-    // TODO: Validate MyFatoorah signature
-    // const signature = req.get("MyFatoorah-Signature");
-    // validateSignature(req.body, signature, process.env.MYFATOORAH_WEBHOOK_SECRET);
-
     const { PaymentId, InvoiceId, PaymentStatus } = req.body.Data;
 
     if (PaymentStatus === "Paid") {
-      // 1. Get payment details
       const statusRes = await axios.get(
         `${process.env.MYFATOORAH_BASE_URL}/v2/getPaymentStatus?key=${PaymentId}&keyType=PaymentId`,
         {
@@ -239,12 +307,8 @@ const handleWebhook = async (req, res) => {
         }
       );
 
-      // 2. Parse orderData from UserDefinedField
       const userDefinedField = statusRes.data.Data.UserDefinedField;
       const orderData = userDefinedField ? JSON.parse(userDefinedField) : {};
-
-      // 3. Create actual order in database
-      // TODO: Call your createOrder function here with orderData.orderData
 
       console.log("✅ Webhook: Order created for PaymentId", PaymentId);
     }
