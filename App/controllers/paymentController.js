@@ -134,9 +134,73 @@ const createMyFatoorahPayment = async (req, res) => {
   }
 };
 
-module.exports = { createMyFatoorahPayment };
+const executeSelectedPayment = async (req, res) => {
+  try {
+    const {
+      paymentMethodId,
+      invoiceId,
+      amount,
+      customerName,
+      customerEmail,
+      phone,
+      userId,
+      orderData,
+    } = req.body;
 
-// ✅ الكود الكامل جاهز للـ server
+    console.log("🚀 Execute Payment:", { paymentMethodId, invoiceId, amount });
+
+    if (!paymentMethodId || !invoiceId || !amount) {
+      return res
+        .status(400)
+        .json({ isSuccess: false, message: "Missing payment data" });
+    }
+
+    const executeRes = await axios.post(
+      `${process.env.MYFATOORAH_BASE_URL}/v2/ExecutePayment`,
+      {
+        PaymentMethodId: parseInt(paymentMethodId),
+        InvoiceValue: parseFloat(amount),
+        CustomerName: customerName,
+        CustomerEmail: customerEmail,
+        CustomerMobile: phone || "96500000000",
+        CallBackUrl: `${
+          process.env.FRONTEND_URL || "http://localhost:3000"
+        }/payment/success`,
+        ErrorUrl: `${
+          process.env.FRONTEND_URL || "http://localhost:3000"
+        }/payment/failed`,
+        NotificationOption: "ALL",
+        UserDefinedField: JSON.stringify({ userId, orderData, invoiceId }),
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${process.env.MYFATOORAH_API_KEY}`,
+          "Content-Type": "application/json",
+        },
+        timeout: 10000,
+      }
+    );
+
+    if (!executeRes.data.IsSuccess || !executeRes.data.Data.PaymentURL) {
+      throw new Error(`Execute failed: ${executeRes.data.Message}`);
+    }
+
+    console.log("✅ REAL MyFatoorah URL:", executeRes.data.Data.PaymentURL);
+    res.json({
+      isSuccess: true,
+      paymentUrl: executeRes.data.Data.PaymentURL,
+    });
+  } catch (error) {
+    console.error("💥 Execute Error:", error.message);
+    res.status(500).json({
+      isSuccess: false,
+      message: error.response?.data?.Message || error.message,
+    });
+  }
+};
+
+// ✅ Export كلهم
 module.exports = {
   createMyFatoorahPayment,
+  executeSelectedPayment, // ✅ مهم جداً
 };
