@@ -1,4 +1,3 @@
-// models/User.js
 const mongoose = require("mongoose");
 const userRoles = require("../../utils/roles");
 
@@ -10,7 +9,7 @@ const userSchema = new mongoose.Schema(
     },
     lastName: {
       type: String,
-      required: true,
+      default: "", // ✅ Allow empty for guests
     },
     email: {
       type: String,
@@ -19,10 +18,24 @@ const userSchema = new mongoose.Schema(
     },
     password: {
       type: String,
-      required: true,
+      required: function () {
+        // ✅ Optional for guests
+        return !this.isGuest;
+      },
     },
     token: {
       type: String,
+    },
+    isGuest: {
+      // ✅ NEW: Guest flag
+      type: Boolean,
+      default: false,
+    },
+    guestId: {
+      // ✅ NEW: Track guest users
+      type: String,
+      unique: true,
+      sparse: true, // allows multiple null values
     },
     role: {
       type: String,

@@ -22,6 +22,7 @@ const getAllUser = asyncWrapper(async (req, res, next) => {
 const register = asyncWrapper(async (req, res, next) => {
   const { firstName, lastName, email, password, role } = req.body;
 
+  // ✅ Guests can't register
   if (!firstName || !lastName || !email || !password) {
     return next(new AppError("All fields are required", 400));
   }
@@ -37,6 +38,7 @@ const register = asyncWrapper(async (req, res, next) => {
     email,
     password: hashedPassword,
     role,
+    isGuest: false, // ✅ Explicitly not guest
   });
 
   const token = await generateJWT({
@@ -66,6 +68,26 @@ const login = asyncWrapper(async (req, res, next) => {
   const user = await User.findOne({ email });
   if (!user) return next(new AppError("Invalid Email or Password", 400));
 
+  // ✅ Skip password check for guests
+  if (user.isGuest) {
+    return res.json({
+      status: httpStatusText.SUCCESS,
+      data: {
+        user: {
+          ...user.toObject(),
+          token:
+            user.token ||
+            (await generateJWT({
+              id: user._id,
+              email: user.email,
+              role: user.role,
+              isGuest: true,
+            })),
+        },
+      },
+    });
+  }
+
   const matchedPass = await bcrypt.compare(password, user.password);
   if (!matchedPass) return next(new AppError("Invalid Email or Password", 400));
 
@@ -75,8 +97,8 @@ const login = asyncWrapper(async (req, res, next) => {
     role: user.role,
   });
 
-  const { password: pwd, ...userWithoutPass } = user.toObject(); // remove password
-  const userWithToken = { ...userWithoutPass, token }; // attach token inside user object
+  const { password: pwd, ...userWithoutPass } = user.toObject();
+  const userWithToken = { ...userWithoutPass, token };
 
   res.json({
     status: httpStatusText.SUCCESS,
@@ -185,14 +207,23 @@ const getAllUsersAdmin = asyncWrapper(async (req, res, next) => {
   });
 });
 
-const getMe = async (req, res) => {
+const getMe = asyncWrapper(async (req, res, next) => {
   try {
-    const user = await User.findById(req.user._id).select("-password");
-    res.json({ user });
+    const user = await User.findById(req.user.id).select("-password");
+    res.json({
+      user: {
+        id: user._id,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        email: user.email,
+        isGuest: user.isGuest, // ✅ Include guest status
+        role: user.role,
+      },
+    });
   } catch (err) {
-    res.status(500).json({ message: "Server error" });
+    next(new AppError("Server error", 500));
   }
-};
+});
 
 module.exports = {
   getAllUser,
