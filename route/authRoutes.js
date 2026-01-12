@@ -12,7 +12,7 @@ router.get(
   passport.authenticate("google", { scope: ["profile", "email"] })
 );
 
-// REPLACE ONLY the /google/callback route
+// REPLACE your /google/callback route with this:
 router.get(
   "/google/callback",
   passport.authenticate("google", {
@@ -24,7 +24,7 @@ router.get(
     console.log("req.user:", req.user);
 
     if (!req.user || !req.user.token) {
-      console.log("❌ NO USER/TOKEN - PROBLEM!");
+      console.log("❌ NO USER/TOKEN");
       return res.redirect(`${FRONTEND_URL}/login`);
     }
 
@@ -35,13 +35,12 @@ router.get(
       maxAge: 7 * 24 * 60 * 60 * 1000,
     });
 
-    console.log("✅ Cookie set");
-
-    // ✅ NEW: Read returnUrl from query params, fallback to home
-    const returnUrl = req.query.returnUrl || `${FRONTEND_URL}/`;
-    console.log("🔄 Redirecting to:", decodeURIComponent(returnUrl));
-
-    res.redirect(decodeURIComponent(returnUrl));
+    // ✅ THIS LINE FIXES EVERYTHING:
+    const returnUrl = req.query.returnUrl
+      ? decodeURIComponent(req.query.returnUrl)
+      : `${FRONTEND_URL}/`;
+    console.log("🔄 Redirecting to:", returnUrl);
+    res.redirect(returnUrl);
   }
 );
 
