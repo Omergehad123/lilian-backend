@@ -42,6 +42,29 @@ const addProducts = asyncWrapper(async (req, res, next) => {
   });
 });
 
+const toggleProductAvailability = asyncWrapper(async (req, res, next) => {
+  const { id } = req.params;
+
+  const product = await Product.findById(id);
+  if (!product) {
+    return next(new AppError("Product not found", 404));
+  }
+
+  // Toggle availability
+  product.isAvailable = !product.isAvailable;
+  await product.save();
+
+  res.json({
+    status: httpStatusText.SUCCESS,
+    data: {
+      product,
+      message: product.isAvailable
+        ? "Product is now available"
+        : "Product is unavailable",
+    },
+  });
+});
+
 const getAllProducts = asyncWrapper(async (req, res) => {
   const products = await Product.find();
   res.json({
@@ -94,7 +117,9 @@ const updateProduct = asyncWrapper(async (req, res, next) => {
   }
   if (updateData.price !== undefined) {
     updateData.price =
-      updateData.price !== "" ? Number(updateData.price) : updateData.actualPrice;
+      updateData.price !== ""
+        ? Number(updateData.price)
+        : updateData.actualPrice;
   }
 
   const product = await Product.findByIdAndUpdate(id, updateData, {
@@ -118,4 +143,5 @@ module.exports = {
   getProduct,
   deleteProduct,
   updateProduct,
+  toggleProductAvailability,
 };

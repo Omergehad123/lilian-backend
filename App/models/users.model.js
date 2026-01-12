@@ -64,6 +64,10 @@ const userSchema = new mongoose.Schema(
         },
       },
     ],
+    isAvailable: {
+      type: Boolean,
+      default: true, // Products available by default
+    },
   },
   {
     timestamps: true,

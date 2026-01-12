@@ -31,5 +31,11 @@ router.patch(
   allowTo(userRoles.ADMIN, userRoles.MANAGER),
   productsController.updateProduct
 );
+router.patch(
+  "/:id/availability",
+  verifyToken,
+  allowTo(userRoles.ADMIN, userRoles.MANAGER),
+  productsController.toggleProductAvailability
+);
 
 module.exports = router;
