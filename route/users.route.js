@@ -3,10 +3,10 @@ const router = express.Router();
 const userController = require("../App/controllers/usersController");
 const verifyToken = require("../App/middleware/verifyToken");
 const User = require("../App/models/users.model");
-const generateJWT = require("../../utils/generateJWT");
-const httpStatusText = require("../../utils/httpStatusText");
+const generateJWT = require("../utils/generateJWT");
+const httpStatusText = require("../utils/httpStatusText");
 const { v4: uuidv4 } = require("uuid");
-const userRoles = require("../../utils/roles");
+const userRoles = require("../utils/roles");
 
 router.post("/guest", async (req, res) => {
   try {
