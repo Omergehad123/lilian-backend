@@ -5,12 +5,13 @@ const path = require("path");
 const multer = require("multer");
 const cors = require("cors");
 const httpStatusText = require("./utils/httpStatusText");
-const cron = require("node-cron");
 const app = express();
 const upload = multer({ dest: "./Uploads/" });
 const OrderController = require("./App/controllers/OrderController");
-cron.schedule("* * * * *", OrderController.checkAndSendNotifications);
-// ======== Environment Variables ========
+
+// ✅ CRON DISABLED - FIXES THE ERROR
+console.log("⏰ CRON DISABLED - Store hours testing mode ✅");
+
 const PORT = process.env.PORT || 5000;
 const DB_URL = process.env.DB_URL;
 const ALLOWED_ORIGINS = process.env.ALLOWED_ORIGINS
@@ -48,7 +49,6 @@ app.set("trust proxy", 1);
 // ======== PASSPORT (NO SESSION for JWT) ========
 const passport = require("./utils/passport");
 app.use(passport.initialize());
-// ✅ REMOVED: app.use(passport.session()); // No sessions for JWT
 
 const cookieParser = require("cookie-parser");
 app.use(cookieParser());
@@ -61,9 +61,6 @@ const orderRouter = require("./route/order.route");
 const authRoutes = require("./route/authRoutes");
 const cityAreaRoutes = require("./route/cityAreaRoutes");
 const promoRoute = require("./route/promos");
-const {
-  checkAndSendNotifications,
-} = require("./App/controllers/OrderController");
 
 app.use("/api/products", productsRouter);
 app.use("/api/users", usersRouter);
@@ -78,7 +75,6 @@ app.post("/api/promos/:code/restore", async (req, res) => {
     const { code } = req.params;
     const { orderId } = req.body;
 
-    // Import Promo model dynamically or at top
     const Promo = mongoose.model("Promo") || require("./models/Promo");
 
     const promo = await Promo.findOne({ code: code.toUpperCase() });
@@ -86,10 +82,8 @@ app.post("/api/promos/:code/restore", async (req, res) => {
       return res.status(404).json({ message: "Promo code not found" });
     }
 
-    // Restore usage count
     promo.usageCount = Math.max(0, promo.usageCount - 1);
 
-    // Remove user from usedBy if exists
     if (promo.usedBy && req.user?.id) {
       promo.usedBy = promo.usedBy.filter((userId) => userId !== req.user.id);
     }
@@ -134,4 +128,5 @@ app.use((error, req, res, next) => {
 // ======== Start Server ========
 app.listen(PORT, () => {
   console.log(`🚀 Server running on port ${PORT}`);
+  console.log("✅ Store hours testing READY!");
 });

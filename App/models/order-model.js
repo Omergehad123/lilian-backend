@@ -121,7 +121,14 @@ const orderSchema = new mongoose.Schema(
     orderCreatedAt: { type: Date, default: Date.now },
     isNotified: { type: Boolean, default: false },
     notificationSentAt: { type: Date },
+    timeValidation: {
+      isWithinHours: { type: Boolean, default: false },
+      checkedAt: { type: Date },
+      storeHoursMessage: { type: String },
+      userAcceptedOutsideHours: { type: Boolean, default: false },
+    },
   },
+
   { timestamps: true }
 );
 

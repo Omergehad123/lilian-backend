@@ -9,7 +9,10 @@ const {
   deleteOrder,
   getPendingOrders,
   checkAndSendNotifications,
-  updateAdminStartTime, // ✅ IMPORTED
+  updateAdminStartTime,
+  getStoreHours,
+  setStoreHours,
+  toggleStoreHoursStatus, // ✅ IMPORTED
 } = require("../App/controllers/OrderController");
 const verifyCookieToken = require("../App/middleware/verifyCookieToken");
 const verifyToken = require("../App/middleware/verifyToken");
@@ -36,7 +39,12 @@ router.patch(
   updateOrderStatus
 );
 
-router.get("/admin/pending", verifyToken, allowTo(userRoles.ADMIN), getPendingOrders);
+router.get(
+  "/admin/pending",
+  verifyToken,
+  allowTo(userRoles.ADMIN),
+  getPendingOrders
+);
 router.patch(
   "/admin/start-time",
   verifyToken,
@@ -49,5 +57,23 @@ router.get(
   allowTo(userRoles.ADMIN),
   checkAndSendNotifications
 );
-
+// Add admin routes for store hours
+router.post(
+  "/admin/store-hours",
+  verifyToken,
+  allowTo(userRoles.ADMIN),
+  setStoreHours
+);
+router.get(
+  "/admin/store-hours",
+  verifyToken,
+  allowTo(userRoles.ADMIN),
+  getStoreHours
+);
+router.patch(
+  "/admin/store-hours/:dayOfWeek/toggle",
+  verifyToken,
+  allowTo(userRoles.ADMIN),
+  toggleStoreHoursStatus
+);
 module.exports = router;
