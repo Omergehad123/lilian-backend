@@ -1,255 +1,98 @@
 const axios = require("axios");
-const User = require("../models/users.model");
-const Order = require("../models/order-model");
 
-// 🔥 PRODUCTION-READY FULLY WORKING CODE
 const createMyFatoorahPayment = async (req, res) => {
   try {
-    console.log("📥 FULL REQUEST:", JSON.stringify(req.body, null, 2));
+    console.log("📥 PAYMENT REQUEST:", req.body);
 
-    // ✅ GUEST CHECKOUT SUPPORT - Skip Order creation
-    const isGuest = !req.user?._id || req.body.guest_checkout;
-    const userId = req.body.userId || req.user?._id || `guest_${Date.now()}`;
+    // 🔥 MINIMAL VALIDATION - WORKS WITH EMERGENCY BYPASS
+    const amount = parseFloat(req.body.amount);
+    if (!amount || amount < 0.1) {
+      return res.status(400).json({
+        isSuccess: false,
+        message: "Amount must be >= 0.100 KWD",
+      });
+    }
 
-    // ✅ Extract payment data (works with ALL frontend formats)
-    const paymentMethod =
-      req.body.paymentMethod || req.body.payment_method || "card";
-    const amountRaw = req.body.amount || req.body.orderData?.totalAmount;
     const customerName =
-      req.body.customerName ||
-      req.body.customer_name ||
-      req.body.orderData?.userInfo?.name ||
-      "Guest Customer";
+      req.body.customerName || req.body.customer_name || "Guest";
     const customerEmail =
-      req.body.customerEmail ||
-      req.body.customer_email ||
-      req.body.orderData?.customerEmail ||
-      "customer@lilian.com";
-    const phone =
+      req.body.customerEmail || req.body.customer_email || "guest@lilian.com";
+    const phone = (
       req.body.phone ||
       req.body.customer_phone ||
-      req.body.orderData?.userInfo?.phone ||
-      "96500000000";
+      "96500000000"
+    ).replace(/^\+/, "");
 
-    // ✅ STRICT VALIDATION
-    if (!amountRaw) {
-      return res.status(400).json({
-        isSuccess: false,
-        message: "Amount is required",
-      });
-    }
-
-    const amount = parseFloat(amountRaw);
-    if (isNaN(amount) || amount < 0.1) {
-      return res.status(400).json({
-        isSuccess: false,
-        message: "Minimum amount is 0.100 KWD",
-      });
-    }
+    const paymentMethod =
+      req.body.paymentMethod || req.body.payment_method || "card";
 
     console.log(
-      `✅ Processing ${amount} KWD | Method: ${paymentMethod} | User: ${userId} | Guest: ${isGuest}`
+      `✅ PROCESSING: ${amount}KWD | ${paymentMethod} | ${customerName}`
     );
 
-    // ✅ API KEY VALIDATION
-    if (!process.env.MYFATOORAH_API_KEY) {
+    // 🔥 MYFATOORAH CONFIG
+    const API_KEY = process.env.MYFATOORAH_API_KEY;
+    const BASE_URL =
+      process.env.MYFATOORAH_BASE_URL || "https://apitest.myfatoorah.com"; // SANDBOX
+
+    if (!API_KEY) {
+      console.error("❌ NO MYFATOORAH_API_KEY in .env");
       return res.status(500).json({
         isSuccess: false,
         message: "Payment gateway not configured",
       });
     }
 
-    // 🔥 PAYMENT METHOD MAPPING (MyFatoorah IDs)
-    let paymentMethodId;
-    switch (paymentMethod.toLowerCase()) {
-      case "knet":
-        paymentMethodId = 1; // KNET
-        break;
-      case "card":
-      default:
-        paymentMethodId = 2; // CARD/Visa/Mastercard
-        break;
-    }
+    // 🔥 PAYMENT METHOD ID
+    const paymentMethodId = paymentMethod === "knet" ? 1 : 2;
 
-    console.log(`🎯 PaymentMethodId: ${paymentMethodId}`);
-
-    // 🔥 GUEST CHECKOUT: Skip Order → Direct Payment
-    if (isGuest) {
-      console.log("👤 GUEST CHECKOUT - Direct Payment (No Order creation)");
-
-      const executeRes = await axios.post(
-        `${process.env.MYFATOORAH_BASE_URL}/v2/ExecutePayment`,
-        {
-          PaymentMethodId: paymentMethodId,
-          InvoiceValue: amount,
-          CustomerName: customerName,
-          CustomerEmail: customerEmail,
-          CustomerMobile: phone.replace(/^\+/, ""),
-          CallBackUrl: `${
-            process.env.FRONTEND_URL || "https://lilyandelarosekw.com"
-          }/payment-success`,
-          ErrorUrl: `${
-            process.env.FRONTEND_URL || "https://lilyandelarosekw.com"
-          }/payment-failed`,
-          NotificationOption: "ALL",
-          Lang: "en",
-          DisplayCurrencyIso: "KWD",
-          UserDefinedField: JSON.stringify({
-            userId,
-            amount,
-            customerName,
-            customerEmail,
-            phone,
-            paymentMethod,
-            timestamp: new Date().toISOString(),
-            orderSummary: req.body.orderData || req.body.orderSummary,
-          }),
-        },
-        {
-          headers: {
-            Authorization: `Bearer ${process.env.MYFATOORAH_API_KEY}`,
-            "Content-Type": "application/json",
-          },
-          timeout: 20000,
-        }
-      );
-
-      console.log("✅ GUEST PAYMENT SUCCESS:", {
-        success: executeRes.data.IsSuccess,
-        paymentUrl: !!executeRes.data.Data?.PaymentURL,
-        invoiceId: executeRes.data.Data?.InvoiceId,
-      });
-
-      if (executeRes.data.IsSuccess && executeRes.data.Data?.PaymentURL) {
-        // 🔥 STORE PENDING PAYMENT (AFTER payment success webhook)
-        console.log("🎉 GUEST PAYMENT URL:", executeRes.data.Data.PaymentURL);
-        return res.json({
-          isSuccess: true,
-          paymentUrl: executeRes.data.Data.PaymentURL,
-          invoiceId: executeRes.data.Data.InvoiceId,
-          message: "Redirecting to payment...",
-        });
-      }
-
-      console.error("❌ Guest payment failed:", executeRes.data);
-      return res.status(400).json({
-        isSuccess: false,
-        message: executeRes.data.Message || "Payment initiation failed",
-      });
-    }
-
-    // 🔥 AUTHENTICATED USERS: Create Order → Payment
-    console.log("👤 AUTH USER - Creating Order first");
-
-    // Build valid Order from request
-    const orderData = req.body.orderData || {};
-    const validOrder = {
-      user: req.user._id,
-      products: orderData.products || [],
-      totalAmount: amount,
-      orderType: orderData.orderType || "pickup",
-      userInfo: {
-        name: customerName,
-        phone: phone,
-      },
-      status: "pending",
-      ...(orderData.promoCode && { promoCode: orderData.promoCode }),
-      ...(orderData.promoDiscount && {
-        promoDiscount: orderData.promoDiscount,
-      }),
-      ...(orderData.subtotal && { subtotal: orderData.subtotal }),
-      ...(orderData.shippingCost && { shippingCost: orderData.shippingCost }),
-    };
-
-    // Fix pickup address
-    if (validOrder.orderType === "pickup") {
-      validOrder.shippingAddress = {
-        city: "Store Pickup",
-        area: "pickup",
-        street: "",
-        block: 0,
-        house: 0,
-      };
-      validOrder.scheduleTime = {
-        date: new Date(
-          orderData.scheduleTime?.date || Date.now()
-        ).toISOString(),
-        timeSlot: orderData.scheduleTime?.timeSlot || "08:00 AM - 01:00 PM",
-      };
-    }
-
-    console.log("📝 Creating Order:", JSON.stringify(validOrder, null, 2));
-
-    // Create Order (only for authenticated users)
-    const newOrder = await Order.create(validOrder);
-    console.log("✅ Order created:", newOrder._id);
-
-    // Execute payment with Order reference
-    const executeRes = await axios.post(
-      `${process.env.MYFATOORAH_BASE_URL}/v2/ExecutePayment`,
+    // 🔥 DIRECT MYFATOORAH EXECUTE PAYMENT
+    const response = await axios.post(
+      `${BASE_URL}/v2/ExecutePayment`,
       {
         PaymentMethodId: paymentMethodId,
         InvoiceValue: amount,
         CustomerName: customerName,
         CustomerEmail: customerEmail,
-        CustomerMobile: phone.replace(/^\+/, ""),
-        CallBackUrl: `${
-          process.env.FRONTEND_URL || "https://lilyandelarosekw.com"
-        }/payment-success`,
-        ErrorUrl: `${
-          process.env.FRONTEND_URL || "https://lilyandelarosekw.com"
-        }/payment-failed`,
+        CustomerMobile: phone,
+        CallBackUrl: "https://lilyandelarosekw.com/payment-success",
+        ErrorUrl: "https://lilyandelarosekw.com/payment-failed",
         NotificationOption: "ALL",
         Lang: "en",
         DisplayCurrencyIso: "KWD",
-        UserDefinedField: JSON.stringify({
-          userId: req.user._id.toString(),
-          orderId: newOrder._id.toString(),
-          amount,
-          customerName,
-          paymentMethod,
-        }),
       },
       {
         headers: {
-          Authorization: `Bearer ${process.env.MYFATOORAH_API_KEY}`,
+          Authorization: `Bearer ${API_KEY}`,
           "Content-Type": "application/json",
         },
-        timeout: 20000,
+        timeout: 10000,
       }
     );
 
-    if (executeRes.data.IsSuccess && executeRes.data.Data?.PaymentURL) {
-      console.log("🎉 AUTH PAYMENT SUCCESS:", executeRes.data.Data.PaymentURL);
-      return res.json({
+    console.log("✅ MYFATOORAH SUCCESS:", response.data.Data?.PaymentURL);
+
+    if (response.data.IsSuccess && response.data.Data?.PaymentURL) {
+      res.json({
         isSuccess: true,
-        paymentUrl: executeRes.data.Data.PaymentURL,
-        invoiceId: executeRes.data.Data.InvoiceId,
-        orderId: newOrder._id,
-        message: "Redirecting to payment...",
+        paymentUrl: response.data.Data.PaymentURL,
+      });
+    } else {
+      res.status(400).json({
+        isSuccess: false,
+        message: response.data.Message || "Payment failed",
       });
     }
-
-    console.error("❌ Auth payment failed:", executeRes.data);
-    return res.status(400).json({
-      isSuccess: false,
-      message: executeRes.data.Message || "Payment execution failed",
-    });
   } catch (error) {
-    console.error("💥 FULL ERROR:", {
+    console.error("💥 MYFATOORAH ERROR:", {
       message: error.message,
       status: error.response?.status,
       data: error.response?.data,
-      url: error.config?.url,
-      stack: error.stack,
     });
 
     res.status(500).json({
       isSuccess: false,
-      message:
-        error.response?.data?.Message ||
-        error.message ||
-        "Payment gateway error",
+      message: "Payment service error: " + error.message,
     });
   }
 };
