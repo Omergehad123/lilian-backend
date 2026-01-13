@@ -1,74 +1,171 @@
 const axios = require("axios");
+const User = require("../models/users.model");
 
 const createMyFatoorahPayment = async (req, res) => {
   try {
-    console.log("📥 PAYMENT REQUEST:", req.body);
+    console.log("📥 FULL REQUEST:", JSON.stringify(req.body, null, 2));
 
-    // 🔥 FIX: Match your frontend field names
-    const paymentMethod =
-      req.body.payment_method || req.body.paymentMethod || "card";
-    const amount = parseFloat(req.body.amount);
-    const customerName = req.body.customer_name || "Guest Customer";
-    const customerPhone = (req.body.customer_phone || "96566123456")
-      .replace(/\D/g, "")
-      .slice(0, 10);
+    // ✅ Extract data with paymentMethod support
+    const paymentMethod = req.body.paymentMethod; // "card" or "knet"
+    const amountRaw = req.body.amount || req.body.orderData?.totalAmount;
+    const customerName =
+      req.body.customerName ||
+      req.body.orderData?.userInfo?.name ||
+      "Guest Customer";
+    const customerEmail =
+      req.body.customerEmail ||
+      req.body.orderData?.customerEmail ||
+      "customer@lilian.com";
+    const phone =
+      req.body.phone || req.body.orderData?.userInfo?.phone || "96500000000";
+    const userId =
+      req.body.userId ||
+      req.body.orderData?.user?._id ||
+      req.user?._id ||
+      "guest";
 
-    if (!amount || amount < 0.1) {
-      return res.status(400).json({
-        isSuccess: false,
-        message: "Amount must be >= 0.100 KWD",
-      });
+    // ✅ VALIDATION
+    if (!amountRaw) {
+      return res
+        .status(400)
+        .json({ isSuccess: false, message: "Amount is required" });
     }
 
-    console.log(`✅ Processing ${amount}KWD | ${paymentMethod}`);
+    const amount = parseFloat(amountRaw);
+    if (isNaN(amount) || amount < 0.1) {
+      return res
+        .status(400)
+        .json({ isSuccess: false, message: "Minimum amount is 0.100 KWD" });
+    }
 
-    // 🔥 YOUR ORIGINAL ENDPOINT + Payment IDs
-    const response = await axios.post(
-      `${
-        process.env.MYFATOORAH_BASE_URL || "https://api.myfatoorah.com"
-      }/v2/ExecutePayment`,
+    console.log(
+      `✅ Processing ${amount} KWD | Method: ${
+        paymentMethod || "auto"
+      } | User: ${userId}`
+    );
+
+    // ✅ API KEY CHECK
+    if (!process.env.MYFATOORAH_API_KEY) {
+      return res
+        .status(500)
+        .json({ isSuccess: false, message: "Payment gateway not configured" });
+    }
+
+    // 🔥 SIMPLIFIED APPROACH - Direct ExecutePayment with method ID
+    let paymentMethodId;
+    if (paymentMethod === "knet") {
+      paymentMethodId = 1; // KNET
+      console.log("🎯 KNET selected - PaymentMethodId: 1");
+    } else {
+      paymentMethodId = 2; // CARD (default)
+      console.log("🎯 CARD selected - PaymentMethodId: 2");
+    }
+
+    // 1. DIRECT EXECUTE PAYMENT - NO Initiate needed
+    const executeRes = await axios.post(
+      `${process.env.MYFATOORAH_BASE_URL}/v2/ExecutePayment`,
       {
-        PaymentMethodId: paymentMethod === "knet" ? 1 : 2,
+        PaymentMethodId: paymentMethodId,
         InvoiceValue: amount,
         CustomerName: customerName,
-        CustomerEmail: "guest@lilian.com",
-        CustomerMobile: customerPhone,
-        CallBackUrl: "https://lilyandelarosekw.com/payment-success",
-        ErrorUrl: "https://lilyandelarosekw.com/payment-failed",
+        CustomerEmail: customerEmail,
+        CustomerMobile: phone,
+        CallBackUrl: `${
+          process.env.FRONTEND_URL || "https://lilyandelarosekw.com"
+        }payment-success`,
+        ErrorUrl: `${
+          process.env.FRONTEND_URL || "https://lilyandelarosekw.com"
+        }payment-failed`,
         NotificationOption: "ALL",
         Lang: "en",
         DisplayCurrencyIso: "KWD",
+        UserDefinedField: JSON.stringify({
+          userId,
+          orderData: req.body.orderData || req.body,
+          paymentMethod,
+        }),
       },
       {
         headers: {
           Authorization: `Bearer ${process.env.MYFATOORAH_API_KEY}`,
           "Content-Type": "application/json",
         },
+        timeout: 15000,
       }
     );
 
+    console.log("✅ Execute Response:", {
+      success: executeRes.data.IsSuccess,
+      paymentUrl: !!executeRes.data.Data?.PaymentURL,
+    });
+
+    if (!executeRes.data.IsSuccess || !executeRes.data.Data.PaymentURL) {
+      console.error("❌ Execute failed:", executeRes.data);
+      return res.status(400).json({
+        isSuccess: false,
+        message: executeRes.data.Message || "Payment execution failed",
+      });
+    }
+
+    console.log("🎉 SUCCESS! PaymentURL:", executeRes.data.Data.PaymentURL);
     res.json({
       isSuccess: true,
-      paymentUrl: response.data.Data.PaymentURL,
+      paymentUrl: executeRes.data.Data.PaymentURL,
     });
   } catch (error) {
-    console.error("💥 ERROR:", error.response?.data || error.message);
+    console.error("💥 FULL ERROR:", {
+      message: error.message,
+      status: error.response?.status,
+      data: error.response?.data,
+      url: error.config?.url,
+    });
 
-    // 🔥 EMERGENCY BYPASS (remove after real API works)
-    res.json({
-      isSuccess: true,
-      paymentUrl: `https://api.myfatoorah.com/connect/trx/v2/PaymentPage?test=${req.body.payment_method}&amount=${req.body.amount}`,
+    res.status(500).json({
+      isSuccess: false,
+      message:
+        error.response?.data?.Message ||
+        error.message ||
+        "Payment gateway error",
     });
   }
 };
 
-const handlePaymentSuccess = (req, res) => {
-  res.redirect("https://lilyandelarosekw.com/payment-success");
+const handlePaymentSuccess = async (req, res) => {
+  try {
+    console.log("📥 SUCCESS CALLBACK:", req.query);
+    const { paymentId, invoiceId } = req.query;
+
+    if (!paymentId && !invoiceId) {
+      return res.redirect(
+        `${
+          process.env.FRONTEND_URL || "https://lilyandelarosekw.com"
+        }/payment-failed?error=no_payment_id`
+      );
+    }
+
+    res.redirect(
+      `${
+        process.env.FRONTEND_URL || "https://lilyandelarosekw.com"
+      }/payment-success?paymentId=${paymentId || invoiceId}`
+    );
+  } catch (error) {
+    console.error("❌ Success handler error:", error);
+    res.redirect(
+      `${
+        process.env.FRONTEND_URL || "https://lilyandelarosekw.com"
+      }/payment-failed?error=server_error`
+    );
+  }
 };
 
-const handleWebhook = (req, res) => {
-  console.log("🔔 WEBHOOK:", req.body);
-  res.json({ success: true });
+const handleWebhook = async (req, res) => {
+  try {
+    console.log("🔔 WEBHOOK:", req.body);
+    res.status(200).json({ success: true });
+  } catch (error) {
+    console.error("❌ Webhook error:", error);
+    res.status(500).json({ success: false });
+  }
 };
 
 module.exports = {
