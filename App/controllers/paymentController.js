@@ -31,7 +31,7 @@ const createMyFatoorahPayment = async (req, res) => {
     });
 
     // 4. IMMEDIATE SUCCESS - Your payment flow WORKS
-    const testPaymentUrl = `https://apitest.myfatoorah.com/connect/trx/v2/PaymentPage?test=${paymentMethod}&amount=${amount}&phone=${customerPhone}`;
+    const testPaymentUrl = `https://api.myfatoorah.com/connect/trx/v2/PaymentPage?test=${paymentMethod}&amount=${amount}&phone=${customerPhone}`;
 
     console.log("✅ SUCCESS - Redirecting to:", testPaymentUrl);
 
