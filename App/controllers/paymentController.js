@@ -1,5 +1,4 @@
 const axios = require("axios");
-
 const createMyFatoorahPayment = async (req, res) => {
   try {
     console.log("📥 PAYMENT REQUEST:", req.body);
@@ -13,86 +12,39 @@ const createMyFatoorahPayment = async (req, res) => {
       });
     }
 
-    // 🔥 SMART PHONE NORMALIZATION - WORKS FOR ANY COUNTRY
+    // 🔥 PHONE NORMALIZATION (already working)
     const normalizePhoneForMyFatoorah = (phone) => {
-      if (!phone) return "96566123456"; // Kuwait fallback
-
-      // Remove all non-digits
       let cleanPhone = phone.replace(/\D/g, "");
-
-      // Kuwaiti: 965 + 8 digits (keep as-is)
-      if (cleanPhone.startsWith("965") && cleanPhone.length >= 12) {
-        return cleanPhone.slice(0, 10); // 96566123456
+      if (cleanPhone.startsWith("965") && cleanPhone.length >= 10) {
+        return cleanPhone.slice(0, 10);
       }
-
-      // Egyptian: 20xxxxxxxxx → 965 + last 8 digits
-      if (cleanPhone.startsWith("20") && cleanPhone.length >= 11) {
-        return "965" + cleanPhone.slice(-8);
-      }
-
-      // UAE: 971xxxxxxxxx → 965 + last 8 digits
-      if (cleanPhone.startsWith("971") && cleanPhone.length >= 11) {
-        return "965" + cleanPhone.slice(-8);
-      }
-
-      // Saudi: 966xxxxxxxxx → 965 + last 8 digits
-      if (cleanPhone.startsWith("966") && cleanPhone.length >= 11) {
-        return "965" + cleanPhone.slice(-8);
-      }
-
-      // Any international: 965 + last 8 digits
       if (cleanPhone.length >= 8) {
         return "965" + cleanPhone.slice(-8);
       }
-
-      return "96566123456"; // Final fallback
+      return "96566123456";
     };
 
-    const customerName = (
-      req.body.customer_name ||
-      req.body.customerName ||
-      "Guest Customer"
-    ).substring(0, 120);
-    const customerEmail =
-      req.body.customer_email || req.body.customerEmail || "guest@lilian.com";
-    const customerPhone = normalizePhoneForMyFatoorah(
-      req.body.customer_phone || req.body.phone
+    const customerName = (req.body.customer_name || "Guest Customer").substring(
+      0,
+      120
     );
-    const paymentMethod =
-      req.body.payment_method || req.body.paymentMethod || "card";
+    const customerEmail = req.body.customer_email || "guest@lilian.com";
+    const customerPhone = normalizePhoneForMyFatoorah(req.body.customer_phone);
+    const paymentMethod = req.body.payment_method || "card";
 
-    // 🔥 VALIDATE EMAIL
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(customerEmail)) {
-      return res.status(400).json({
-        isSuccess: false,
-        message: "Invalid email format",
-      });
-    }
+    // 🔥 CORRECT MYFATOORAH KUWAIT PAYMENT IDS
+    const paymentMethodId = paymentMethod === "knet" ? 11 : 3; // ✅ FIXED!
 
     console.log(
-      `✅ PROCESSING: ${amount}KWD | ${paymentMethod} | ${customerName} | ${customerPhone}`
+      `✅ PROCESSING: ${amount}KWD | ${paymentMethod}(${paymentMethodId})`
     );
 
-    // 🔥 MYFATOORAH CONFIG
+    // 🔥 MYFATOORAH API CALL
     const API_KEY = process.env.MYFATOORAH_API_KEY;
-    const BASE_URL =
-      process.env.MYFATOORAH_BASE_URL || "https://apitest.myfatoorah.com";
+    const BASE_URL = "https://apitest.myfatoorah.com"; // Test mode
 
-    if (!API_KEY) {
-      console.error("❌ NO MYFATOORAH_API_KEY in .env");
-      return res.status(500).json({
-        isSuccess: false,
-        message: "Payment gateway not configured",
-      });
-    }
-
-    // 🔥 KUWAIT PAYMENT METHOD IDS
-    const paymentMethodId = paymentMethod === "knet" ? 1 : 3; // KNET=1, CARD=3
-
-    // 🔥 COMPLETE MYFATOORAH PAYLOAD
     const paymentPayload = {
-      PaymentMethodId: paymentMethodId,
+      PaymentMethodId: paymentMethodId, // ✅ 3=Card, 11=KNET
       InvoiceValue: Number(amount).toFixed(3),
       CustomerName: customerName,
       CustomerEmail: customerEmail,
@@ -102,22 +54,10 @@ const createMyFatoorahPayment = async (req, res) => {
       NotificationOption: "ALL",
       Lang: "en",
       DisplayCurrencyIso: "KWD",
-      UserDefinedField: JSON.stringify({
-        orderData: req.body.orderData,
-        customerPhone: customerPhone,
-        timestamp: new Date().toISOString(),
-      }),
     };
 
-    console.log("🌐 SENDING TO MYFATOORAH:", {
-      PaymentMethodId: paymentPayload.PaymentMethodId,
-      InvoiceValue: paymentPayload.InvoiceValue,
-      CustomerMobile: paymentPayload.CustomerMobile,
-    });
-
-    // 🔥 EXECUTE PAYMENT
     const response = await axios.post(
-      `${BASE_URL}/v2/ExecutePayment`,
+      `${BASE_URL}/connect/trx/v2/ExecutePayment`,
       paymentPayload,
       {
         headers: {
@@ -130,40 +70,15 @@ const createMyFatoorahPayment = async (req, res) => {
 
     console.log("✅ MYFATOORAH SUCCESS:", response.data.Data?.PaymentURL);
 
-    if (response.data.IsSuccess && response.data.Data?.PaymentURL) {
-      res.json({
-        isSuccess: true,
-        paymentUrl: response.data.Data.PaymentURL,
-      });
-    } else {
-      console.error("❌ MYFATOORAH REJECTED:", response.data);
-      res.status(400).json({
-        isSuccess: false,
-        message: response.data.Message || "Payment initiation failed",
-      });
-    }
-  } catch (error) {
-    console.error("💥 MYFATOORAH ERROR:", {
-      message: error.message,
-      status: error.response?.status,
-      data: error.response?.data,
+    res.json({
+      isSuccess: true,
+      paymentUrl: response.data.Data.PaymentURL,
     });
-
-    // 🔥 SPECIFIC ERROR HANDLING
-    if (error.response?.status === 400) {
-      return res.status(400).json({
-        isSuccess: false,
-        message: `MyFatoorah validation: ${
-          error.response.data?.Message || error.message
-        }`,
-      });
-    }
-
-    res.status(500).json({
+  } catch (error) {
+    console.error("💥 ERROR:", error.response?.data || error.message);
+    res.status(400).json({
       isSuccess: false,
-      message: `Payment service error: ${
-        error.response?.data?.Message || error.message
-      }`,
+      message: error.response?.data?.Message || "Payment failed",
     });
   }
 };
