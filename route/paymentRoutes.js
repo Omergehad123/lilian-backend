@@ -1,16 +1,16 @@
 const express = require("express");
 const router = express.Router();
 
-// ✅ CORRECT IMPORT - Destructure properly
+// 🔥 IMPORT - Match your controller EXACTLY
 const {
   createMyFatoorahPayment,
   handlePaymentSuccess,
-  handlePaymentFailed,
-} = require("../App/controllers/paymentController"); // Your path
+  handleWebhook,
+} = require("../App/controllers/paymentController");
 
-// ✅ ROUTES - Each handler is a FUNCTION
-router.post("/myfatoorah", createMyFatoorahPayment); // Line 20 ✅
-router.get("/success", handlePaymentSuccess);
-router.get("/failed", handlePaymentFailed);
+// 🔥 ROUTES - Line 14 fixed
+router.post("/myfatoorah", createMyFatoorahPayment); // ✅ POST works
+router.get("/success", handlePaymentSuccess); // ✅ Line 14 FIXED
+router.post("/webhook", handleWebhook); // ✅ Webhook
 
 module.exports = router;
