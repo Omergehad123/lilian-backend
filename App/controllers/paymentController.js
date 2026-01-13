@@ -140,8 +140,19 @@ const handleWebhook = async (req, res) => {
   res.status(200).json({ success: true });
 };
 
+const testPaymentEndpoint = (req, res) => {
+  console.log("✅ TEST ENDPOINT REACHED - NO AUTH!");
+  console.log("📥 PAYLOAD:", req.body);
+  res.json({
+    isSuccess: true,
+    message: "Controller working!",
+    received: req.body,
+  });
+};
+
 module.exports = {
   createMyFatoorahPayment,
   handlePaymentSuccess,
   handleWebhook,
+  testPaymentEndpoint,
 };
