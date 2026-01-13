@@ -57,7 +57,7 @@ const createMyFatoorahPayment = async (req, res) => {
     // 🔥 EMERGENCY BYPASS (remove after real API works)
     res.json({
       isSuccess: true,
-      paymentUrl: `https://apitest.myfatoorah.com/connect/trx/v2/PaymentPage?test=${req.body.payment_method}&amount=${req.body.amount}`,
+      paymentUrl: `https://api.myfatoorah.com/connect/trx/v2/PaymentPage?test=${req.body.payment_method}&amount=${req.body.amount}`,
     });
   }
 };
