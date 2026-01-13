@@ -142,7 +142,6 @@ const handleWebhook = async (req, res) => {
 
     if (UserDefinedField) {
       const udfData = JSON.parse(UserDefinedField);
-      console.log("📦 Webhook Order Data:", udfData);
     }
 
     res.status(200).json({ success: true, message: "Webhook processed" });
