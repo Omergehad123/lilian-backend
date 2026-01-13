@@ -10,7 +10,7 @@ const {
 
 console.log("✅ Middleware loaded:", typeof verifyCookieToken === "function");
 
-router.post("/myfatoorah", verifyCookieToken, createMyFatoorahPayment);
-router.post("/success", verifyCookieToken, handlePaymentSuccess);
+router.post("/myfatoorah", createMyFatoorahPayment);
+router.post("/success", handlePaymentSuccess);
 
 module.exports = router;
