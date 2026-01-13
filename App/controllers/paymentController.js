@@ -1,15 +1,18 @@
 const axios = require("axios");
-const User = require("../models/users.model");
 
 const createMyFatoorahPayment = async (req, res) => {
   try {
     console.log("📥 FULL REQUEST:", JSON.stringify(req.body, null, 2));
 
-    // 🔥 FIX: Support BOTH frontend formats
-    const paymentMethod = req.body.payment_method || req.body.paymentMethod; // ✅ FIXED
-    const amountRaw = req.body.amount || req.body.orderData?.totalAmount; // ✅ FIXED
+    // 🔥 SUPPORT YOUR FRONTEND FIELD NAMES + BACKWARDS COMPAT
+    const paymentMethod =
+      req.body.payment_method || req.body.paymentMethod || "card";
+    const amountRaw = req.body.amount || req.body.orderData?.totalAmount;
     const customerName =
-      req.body.customer_name || req.body.customerName || "Guest Customer"; // ✅ FIXED
+      req.body.customer_name ||
+      req.body.customerName ||
+      req.body.orderData?.userInfo?.name ||
+      "Guest Customer";
     const customerEmail =
       req.body.customerEmail ||
       req.body.orderData?.customerEmail ||
@@ -18,14 +21,14 @@ const createMyFatoorahPayment = async (req, res) => {
       req.body.customer_phone ||
       req.body.phone ||
       req.body.orderData?.userInfo?.phone ||
-      "96500000000"; // ✅ FIXED
+      "96500000000";
     const userId =
       req.body.userId ||
       req.body.orderData?.user?._id ||
       req.user?._id ||
       "guest";
 
-    // ✅ VALIDATION (unchanged)
+    // ✅ VALIDATION
     if (!amountRaw) {
       return res
         .status(400)
@@ -39,44 +42,47 @@ const createMyFatoorahPayment = async (req, res) => {
         .json({ isSuccess: false, message: "Minimum amount is 0.100 KWD" });
     }
 
+    // ✅ PHONE NORMALIZATION
+    const cleanPhone = phone.replace(/\D/g, "").slice(0, 10);
+
     console.log(
-      `✅ Processing ${amount} KWD | Method: ${
-        paymentMethod || "auto"
-      } | User: ${userId}`
+      `✅ Processing ${amount} KWD | Method: ${paymentMethod} | Phone: ${cleanPhone} | User: ${userId}`
     );
 
-    // ✅ API KEY CHECK (unchanged)
+    // ✅ API CONFIG
     if (!process.env.MYFATOORAH_API_KEY) {
       return res
         .status(500)
         .json({ isSuccess: false, message: "Payment gateway not configured" });
     }
 
-    // 🔥 YOUR ORIGINAL PaymentMethodId LOGIC (unchanged)
+    // 🔥 PAYMENT METHOD IDS (your working values)
     let paymentMethodId;
     if (paymentMethod === "knet") {
       paymentMethodId = 1; // KNET
       console.log("🎯 KNET selected - PaymentMethodId: 1");
     } else {
-      paymentMethodId = 2; // CARD (default)
+      paymentMethodId = 2; // CARD
       console.log("🎯 CARD selected - PaymentMethodId: 2");
     }
 
-    // 🔥 YOUR ORIGINAL ExecutePayment (unchanged)
+    // 🔥 LIVE MYFATOORAH EXECUTE PAYMENT
     const executeRes = await axios.post(
-      `${process.env.MYFATOORAH_BASE_URL}/v2/ExecutePayment`,
+      `${
+        process.env.MYFATOORAH_BASE_URL || "https://api.myfatoorah.com"
+      }/v2/ExecutePayment`,
       {
         PaymentMethodId: paymentMethodId,
         InvoiceValue: amount,
         CustomerName: customerName,
         CustomerEmail: customerEmail,
-        CustomerMobile: phone,
+        CustomerMobile: cleanPhone,
         CallBackUrl: `${
           process.env.FRONTEND_URL || "https://lilyandelarosekw.com"
-        }payment-success`,
+        }/payment-success`,
         ErrorUrl: `${
           process.env.FRONTEND_URL || "https://lilyandelarosekw.com"
-        }payment-failed`,
+        }/payment-failed`,
         NotificationOption: "ALL",
         Lang: "en",
         DisplayCurrencyIso: "KWD",
@@ -84,6 +90,7 @@ const createMyFatoorahPayment = async (req, res) => {
           userId,
           orderData: req.body.orderData || req.body,
           paymentMethod,
+          timestamp: new Date().toISOString(),
         }),
       },
       {
@@ -91,27 +98,29 @@ const createMyFatoorahPayment = async (req, res) => {
           Authorization: `Bearer ${process.env.MYFATOORAH_API_KEY}`,
           "Content-Type": "application/json",
         },
-        timeout: 15000,
+        timeout: 30000,
       }
     );
 
-    console.log("✅ Execute Response:", {
-      success: executeRes.data.IsSuccess,
+    console.log("✅ MyFatoorah SUCCESS:", {
+      isSuccess: executeRes.data.IsSuccess,
       paymentUrl: !!executeRes.data.Data?.PaymentURL,
+      invoiceId: executeRes.data.Data?.InvoiceId,
     });
 
-    if (!executeRes.data.IsSuccess || !executeRes.data.Data.PaymentURL) {
-      console.error("❌ Execute failed:", executeRes.data);
+    if (!executeRes.data.IsSuccess || !executeRes.data.Data?.PaymentURL) {
+      console.error("❌ MyFatoorah failed:", executeRes.data);
       return res.status(400).json({
         isSuccess: false,
         message: executeRes.data.Message || "Payment execution failed",
       });
     }
 
-    console.log("🎉 SUCCESS! PaymentURL:", executeRes.data.Data.PaymentURL);
+    console.log("🎉 LIVE PAYMENT URL:", executeRes.data.Data.PaymentURL);
     res.json({
       isSuccess: true,
       paymentUrl: executeRes.data.Data.PaymentURL,
+      invoiceId: executeRes.data.Data.InvoiceId,
     });
   } catch (error) {
     console.error("💥 FULL ERROR:", {
@@ -133,7 +142,7 @@ const createMyFatoorahPayment = async (req, res) => {
 
 const handlePaymentSuccess = async (req, res) => {
   try {
-    console.log("📥 SUCCESS CALLBACK:", req.query);
+    console.log("✅ PAYMENT SUCCESS:", req.query);
     const { paymentId, invoiceId } = req.query;
 
     if (!paymentId && !invoiceId) {
@@ -150,7 +159,25 @@ const handlePaymentSuccess = async (req, res) => {
       }/payment-success?paymentId=${paymentId || invoiceId}`
     );
   } catch (error) {
-    console.error("❌ Success handler error:", error);
+    console.error("❌ Success redirect error:", error);
+    res.redirect(
+      `${
+        process.env.FRONTEND_URL || "https://lilyandelarosekw.com"
+      }/payment-failed?error=server_error`
+    );
+  }
+};
+
+const handlePaymentFailed = async (req, res) => {
+  try {
+    console.log("❌ PAYMENT FAILED:", req.query);
+    res.redirect(
+      `${
+        process.env.FRONTEND_URL || "https://lilyandelarosekw.com"
+      }/payment-failed?error=${req.query.error || "cancelled"}`
+    );
+  } catch (error) {
+    console.error("❌ Failed redirect error:", error);
     res.redirect(
       `${
         process.env.FRONTEND_URL || "https://lilyandelarosekw.com"
@@ -161,8 +188,12 @@ const handlePaymentSuccess = async (req, res) => {
 
 const handleWebhook = async (req, res) => {
   try {
-    console.log("🔔 WEBHOOK:", req.body);
-    res.status(200).json({ success: true });
+    console.log("🔔 WEBHOOK RECEIVED:", req.body);
+
+    // TODO: Update order status in database
+    const { InvoiceId, PaymentId } = req.body;
+
+    res.status(200).json({ success: true, message: "Webhook processed" });
   } catch (error) {
     console.error("❌ Webhook error:", error);
     res.status(500).json({ success: false });
@@ -172,5 +203,6 @@ const handleWebhook = async (req, res) => {
 module.exports = {
   createMyFatoorahPayment,
   handlePaymentSuccess,
+  handlePaymentFailed,
   handleWebhook,
 };
