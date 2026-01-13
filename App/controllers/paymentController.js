@@ -1,6 +1,6 @@
 const axios = require("axios");
 const User = require("../models/users.model");
-const Order = require("../models/order.model"); // Add this import
+const Order = require("../models/order-model");
 
 // 🔥 PRODUCTION-READY FULLY WORKING CODE
 const createMyFatoorahPayment = async (req, res) => {
