@@ -5,84 +5,84 @@ const createMyFatoorahPayment = async (req, res) => {
   try {
     console.log("📥 FULL REQUEST:", JSON.stringify(req.body, null, 2));
 
-    // ✅ Extract data with paymentMethod support
-    const paymentMethod = req.body.paymentMethod; // "card" or "knet"
-    const amountRaw = req.body.amount || req.body.orderData?.totalAmount;
-    const customerName =
-      req.body.customerName ||
-      req.body.orderData?.userInfo?.name ||
-      "Guest Customer";
-    const customerEmail =
-      req.body.customerEmail ||
-      req.body.orderData?.customerEmail ||
-      "customer@lilian.com";
-    const phone =
-      req.body.phone || req.body.orderData?.userInfo?.phone || "96500000000";
-    const userId =
-      req.body.userId ||
-      req.body.orderData?.user?._id ||
-      req.user?._id ||
-      "guest";
+    // ✅ FIXED: Match frontend payload exactly
+    const {
+      amount,
+      customerName,
+      customerPhone,
+      paymentMethod,
+      customerEmail,
+      orderData,
+      userId,
+    } = req.body;
 
-    // ✅ VALIDATION
-    if (!amountRaw) {
+    // ✅ BACKWARDS COMPATIBILITY - handle both snake_case and camelCase
+    const finalPaymentMethod = paymentMethod || req.body.payment_method;
+    const finalAmount =
+      amount || req.body.amountRaw || req.body.orderData?.totalAmount;
+    const finalCustomerName =
+      customerName || req.body.customer_name || "Guest Customer";
+    const finalCustomerEmail =
+      customerEmail || req.body.customer_email || "customer@lilian.com";
+    const finalPhone =
+      customerPhone || req.body.customer_phone || "96500000000";
+    const finalUserId = userId || req.body.userId || "guest";
+
+    console.log("🔍 PROCESSED:", {
+      finalAmount,
+      finalPaymentMethod,
+      finalCustomerName,
+      finalPhone,
+    });
+
+    // VALIDATION
+    if (!finalAmount) {
       return res
         .status(400)
         .json({ isSuccess: false, message: "Amount is required" });
     }
 
-    const amount = parseFloat(amountRaw);
-    if (isNaN(amount) || amount < 0.1) {
+    const parsedAmount = parseFloat(finalAmount);
+    if (isNaN(parsedAmount) || parsedAmount < 0.1) {
       return res
         .status(400)
         .json({ isSuccess: false, message: "Minimum amount is 0.100 KWD" });
     }
 
-    console.log(
-      `✅ Processing ${amount} KWD | Method: ${
-        paymentMethod || "auto"
-      } | User: ${userId}`
-    );
-
-    // ✅ API KEY CHECK
     if (!process.env.MYFATOORAH_API_KEY) {
       return res
         .status(500)
         .json({ isSuccess: false, message: "Payment gateway not configured" });
     }
 
-    // 🔥 SIMPLIFIED APPROACH - Direct ExecutePayment with method ID
-    let paymentMethodId;
-    if (paymentMethod === "knet") {
-      paymentMethodId = 1; // KNET
-      console.log("🎯 KNET selected - PaymentMethodId: 1");
-    } else {
-      paymentMethodId = 2; // CARD (default)
-      console.log("🎯 CARD selected - PaymentMethodId: 2");
-    }
+    // PAYMENT METHOD ID
+    const paymentMethodId = finalPaymentMethod === "knet" ? 1 : 2;
+    console.log(
+      `🎯 ${finalPaymentMethod?.toUpperCase()} - PaymentMethodId: ${paymentMethodId}`
+    );
 
-    // 1. DIRECT EXECUTE PAYMENT - NO Initiate needed
+    // EXECUTE PAYMENT
     const executeRes = await axios.post(
       `${process.env.MYFATOORAH_BASE_URL}/v2/ExecutePayment`,
       {
         PaymentMethodId: paymentMethodId,
-        InvoiceValue: amount,
-        CustomerName: customerName,
-        CustomerEmail: customerEmail,
-        CustomerMobile: phone,
+        InvoiceValue: parsedAmount,
+        CustomerName: finalCustomerName,
+        CustomerEmail: finalCustomerEmail,
+        CustomerMobile: finalPhone,
         CallBackUrl: `${
           process.env.FRONTEND_URL || "https://lilyandelarosekw.com"
-        }payment-success`,
+        }/payment-success`,
         ErrorUrl: `${
           process.env.FRONTEND_URL || "https://lilyandelarosekw.com"
-        }payment-failed`,
+        }/payment-failed`,
         NotificationOption: "ALL",
         Lang: "en",
         DisplayCurrencyIso: "KWD",
         UserDefinedField: JSON.stringify({
-          userId,
-          orderData: req.body.orderData || req.body,
-          paymentMethod,
+          userId: finalUserId,
+          orderData: orderData || req.body,
+          paymentMethod: finalPaymentMethod,
         }),
       },
       {
@@ -94,12 +94,7 @@ const createMyFatoorahPayment = async (req, res) => {
       }
     );
 
-    console.log("✅ Execute Response:", {
-      success: executeRes.data.IsSuccess,
-      paymentUrl: !!executeRes.data.Data?.PaymentURL,
-    });
-
-    if (!executeRes.data.IsSuccess || !executeRes.data.Data.PaymentURL) {
+    if (!executeRes.data.IsSuccess || !executeRes.data.Data?.PaymentURL) {
       console.error("❌ Execute failed:", executeRes.data);
       return res.status(400).json({
         isSuccess: false,
@@ -117,7 +112,6 @@ const createMyFatoorahPayment = async (req, res) => {
       message: error.message,
       status: error.response?.status,
       data: error.response?.data,
-      url: error.config?.url,
     });
 
     res.status(500).json({
@@ -133,9 +127,11 @@ const createMyFatoorahPayment = async (req, res) => {
 const handlePaymentSuccess = async (req, res) => {
   try {
     console.log("📥 SUCCESS CALLBACK:", req.query);
-    const { paymentId, invoiceId } = req.query;
+    const { paymentId, invoiceId, PaymentId, InvoiceId } = req.query;
 
-    if (!paymentId && !invoiceId) {
+    const id = paymentId || invoiceId || PaymentId || InvoiceId;
+
+    if (!id) {
       return res.redirect(
         `${
           process.env.FRONTEND_URL || "https://lilyandelarosekw.com"
@@ -146,7 +142,7 @@ const handlePaymentSuccess = async (req, res) => {
     res.redirect(
       `${
         process.env.FRONTEND_URL || "https://lilyandelarosekw.com"
-      }/payment-success?paymentId=${paymentId || invoiceId}`
+      }/payment-success?paymentId=${id}`
     );
   } catch (error) {
     console.error("❌ Success handler error:", error);
@@ -161,6 +157,7 @@ const handlePaymentSuccess = async (req, res) => {
 const handleWebhook = async (req, res) => {
   try {
     console.log("🔔 WEBHOOK:", req.body);
+    // TODO: Process payment confirmation and create order
     res.status(200).json({ success: true });
   } catch (error) {
     console.error("❌ Webhook error:", error);

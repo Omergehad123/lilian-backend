@@ -1,16 +1,16 @@
 const express = require("express");
 const router = express.Router();
-
-const verifyCookieToken = require("../App/middleware/verifyCookieToken");
-
 const {
   createMyFatoorahPayment,
   handlePaymentSuccess,
+  handleWebhook,
 } = require("../App/controllers/paymentController");
 
-console.log("✅ Middleware loaded:", typeof verifyCookieToken === "function");
+console.log("✅ Payment routes loaded");
 
-router.post("/myfatoorah", verifyCookieToken, createMyFatoorahPayment);
-router.post("/success", verifyCookieToken, handlePaymentSuccess);
+// ✅ NO AUTH REQUIRED for payment - GUESTS CAN PAY
+router.post("/myfatoorah", createMyFatoorahPayment);
+router.get("/success", handlePaymentSuccess); // ✅ GET not POST for callback
+router.post("/webhook", handleWebhook);
 
 module.exports = router;
