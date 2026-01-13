@@ -5,26 +5,27 @@ const createMyFatoorahPayment = async (req, res) => {
   try {
     console.log("📥 FULL REQUEST:", JSON.stringify(req.body, null, 2));
 
-    // ✅ Extract data with paymentMethod support
-    const paymentMethod = req.body.paymentMethod; // "card" or "knet"
-    const amountRaw = req.body.amount || req.body.orderData?.totalAmount;
+    // 🔥 FIX: Support BOTH frontend formats
+    const paymentMethod = req.body.payment_method || req.body.paymentMethod; // ✅ FIXED
+    const amountRaw = req.body.amount || req.body.orderData?.totalAmount; // ✅ FIXED
     const customerName =
-      req.body.customerName ||
-      req.body.orderData?.userInfo?.name ||
-      "Guest Customer";
+      req.body.customer_name || req.body.customerName || "Guest Customer"; // ✅ FIXED
     const customerEmail =
       req.body.customerEmail ||
       req.body.orderData?.customerEmail ||
       "customer@lilian.com";
     const phone =
-      req.body.phone || req.body.orderData?.userInfo?.phone || "96500000000";
+      req.body.customer_phone ||
+      req.body.phone ||
+      req.body.orderData?.userInfo?.phone ||
+      "96500000000"; // ✅ FIXED
     const userId =
       req.body.userId ||
       req.body.orderData?.user?._id ||
       req.user?._id ||
       "guest";
 
-    // ✅ VALIDATION
+    // ✅ VALIDATION (unchanged)
     if (!amountRaw) {
       return res
         .status(400)
@@ -44,14 +45,14 @@ const createMyFatoorahPayment = async (req, res) => {
       } | User: ${userId}`
     );
 
-    // ✅ API KEY CHECK
+    // ✅ API KEY CHECK (unchanged)
     if (!process.env.MYFATOORAH_API_KEY) {
       return res
         .status(500)
         .json({ isSuccess: false, message: "Payment gateway not configured" });
     }
 
-    // 🔥 SIMPLIFIED APPROACH - Direct ExecutePayment with method ID
+    // 🔥 YOUR ORIGINAL PaymentMethodId LOGIC (unchanged)
     let paymentMethodId;
     if (paymentMethod === "knet") {
       paymentMethodId = 1; // KNET
@@ -61,7 +62,7 @@ const createMyFatoorahPayment = async (req, res) => {
       console.log("🎯 CARD selected - PaymentMethodId: 2");
     }
 
-    // 1. DIRECT EXECUTE PAYMENT - NO Initiate needed
+    // 🔥 YOUR ORIGINAL ExecutePayment (unchanged)
     const executeRes = await axios.post(
       `${process.env.MYFATOORAH_BASE_URL}/v2/ExecutePayment`,
       {
