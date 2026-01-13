@@ -1,22 +1,16 @@
 const express = require("express");
 const router = express.Router();
 
-// Import controllers
+// ✅ CORRECT IMPORT - Destructure properly
 const {
   createMyFatoorahPayment,
   handlePaymentSuccess,
   handlePaymentFailed,
-  handleWebhook,
-} = require("../App/controllers/paymentController");
+} = require("../App/controllers/paymentController"); // Your path
 
-// 🔥 PUBLIC - No auth required for payment initiation
-router.post("/myfatoorah", createMyFatoorahPayment);
-
-// 🔥 CALLBACKS - MyFatoorah redirects here
+// ✅ ROUTES - Each handler is a FUNCTION
+router.post("/myfatoorah", createMyFatoorahPayment); // Line 20 ✅
 router.get("/success", handlePaymentSuccess);
 router.get("/failed", handlePaymentFailed);
-
-// 🔥 WEBHOOK - MyFatoorah posts payment status
-router.post("/webhook", handleWebhook);
 
 module.exports = router;
