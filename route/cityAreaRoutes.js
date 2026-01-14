@@ -47,6 +47,51 @@ router.post("/", authMiddleware, async (req, res) => {
   }
 });
 
+router.post("/update-area", authMiddleware, async (req, res) => {
+  try {
+    const { cityId, areaId, name, shippingPrice } = req.body;
+
+    // Validation
+    if (
+      !cityId ||
+      !areaId ||
+      !name?.en ||
+      !name?.ar ||
+      shippingPrice === undefined
+    ) {
+      return res.status(400).json({
+        success: false,
+        error: "cityId, areaId, name (en/ar), and shippingPrice are required",
+      });
+    }
+
+    const city = await CityArea.findOne({ _id: cityId, isActive: true });
+    if (!city) {
+      return res.status(404).json({ success: false, error: "City not found" });
+    }
+
+    const areaIndex = city.areas.findIndex(
+      (area) => area._id.toString() === areaId
+    );
+    if (areaIndex === -1) {
+      return res.status(404).json({ success: false, error: "Area not found" });
+    }
+
+    city.areas[areaIndex] = {
+      _id: city.areas[areaIndex]._id, // Preserve ID
+      name,
+      shippingPrice: parseFloat(shippingPrice),
+      isActive: true,
+    };
+
+    await city.save();
+    const populatedCity = await CityArea.findById(city._id).lean();
+    res.json({ success: true, city: populatedCity });
+  } catch (error) {
+    res.status(400).json({ success: false, error: error.message });
+  }
+});
+
 //  All other routes follow same pattern...
 router.put("/:id", authMiddleware, async (req, res) => {
   try {
@@ -144,47 +189,3 @@ router.put("/areas/:areaId/toggle", authMiddleware, async (req, res) => {
 });
 
 module.exports = router;
-
-router.post("/update-area", authMiddleware, async (req, res) => {
-  try {
-    const { cityId, areaId, name, shippingPrice } = req.body;
-
-    if (
-      !cityId ||
-      !areaId ||
-      !name?.en ||
-      !name?.ar ||
-      shippingPrice === undefined
-    ) {
-      return res.status(400).json({
-        success: false,
-        error: "cityId, areaId, name (en/ar), and shippingPrice are required",
-      });
-    }
-
-    const city = await CityArea.findOne({ _id: cityId, isActive: true });
-    if (!city) {
-      return res.status(404).json({ success: false, error: "City not found" });
-    }
-
-    const areaIndex = city.areas.findIndex(
-      (area) => area._id.toString() === areaId
-    );
-    if (areaIndex === -1) {
-      return res.status(404).json({ success: false, error: "Area not found" });
-    }
-
-    // Update area
-    city.areas[areaIndex] = {
-      ...city.areas[areaIndex].toObject(),
-      name,
-      shippingPrice: parseFloat(shippingPrice),
-    };
-
-    await city.save();
-    const populatedCity = await CityArea.findById(city._id).lean();
-    res.json({ success: true, city: populatedCity });
-  } catch (error) {
-    res.status(400).json({ success: false, error: error.message });
-  }
-});
