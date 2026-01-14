@@ -15,7 +15,6 @@ exports.addCity = async (req, res) => {
   try {
     const { key, name, areas } = req.body;
 
-    // ✅ VALIDATION - Fix the undefined error
     if (!key || typeof key !== "string") {
       return res.status(400).json({
         success: false,
@@ -51,7 +50,6 @@ exports.addCity = async (req, res) => {
 
     await city.save();
     const populatedCity = await CityArea.findById(city._id).lean();
-
     res.status(201).json({ success: true, city: populatedCity });
   } catch (error) {
     res.status(400).json({ success: false, error: error.message });
@@ -88,7 +86,6 @@ exports.deleteCity = async (req, res) => {
     if (!city) {
       return res.status(404).json({ success: false, error: "City not found" });
     }
-
     res.json({ success: true, message: "City deleted successfully" });
   } catch (error) {
     res.status(500).json({ success: false, error: error.message });
@@ -99,7 +96,7 @@ exports.addAreaToCity = async (req, res) => {
   try {
     const { cityId, name, shippingPrice } = req.body;
 
-    if (!cityId || !name?.en || !name?.ar || !shippingPrice) {
+    if (!cityId || !name?.en || !name?.ar || shippingPrice === undefined) {
       return res.status(400).json({
         success: false,
         error: "cityId, name (en/ar), and shippingPrice are required",
@@ -111,7 +108,6 @@ exports.addAreaToCity = async (req, res) => {
       return res.status(404).json({ success: false, error: "City not found" });
     }
 
-    // ✅ Check duplicate areas
     const existingArea = city.areas.find(
       (area) =>
         area.name.en.toLowerCase() === name.en.toLowerCase() ||
@@ -133,43 +129,16 @@ exports.addAreaToCity = async (req, res) => {
 
     await city.save();
     const populatedCity = await CityArea.findById(city._id).lean();
-
     res.json({ success: true, city: populatedCity });
   } catch (error) {
     res.status(400).json({ success: false, error: error.message });
   }
 };
 
-exports.toggleAreaStatus = async (req, res) => {
-  try {
-    const { areaId } = req.params;
-    const city = await CityArea.findOne({
-      "areas._id": areaId,
-      isActive: true,
-    });
-
-    if (!city) {
-      return res.status(404).json({ success: false, error: "Area not found" });
-    }
-
-    const area = city.areas.id(areaId);
-    area.isActive = !area.isActive;
-
-    await city.save();
-    const populatedCity = await CityArea.findById(city._id).lean();
-
-    res.json({ success: true, city: populatedCity });
-  } catch (error) {
-    res.status(500).json({ success: false, error: error.message });
-  }
-};
-
-// ✅ ADD THIS FUNCTION to your controller exports
 exports.updateAreaInCity = async (req, res) => {
   try {
     const { cityId, areaId, name, shippingPrice } = req.body;
 
-    // Validation
     if (
       !cityId ||
       !areaId ||
@@ -188,7 +157,6 @@ exports.updateAreaInCity = async (req, res) => {
       return res.status(404).json({ success: false, error: "City not found" });
     }
 
-    // Find and update the area
     const areaIndex = city.areas.findIndex(
       (area) => area._id.toString() === areaId
     );
@@ -211,19 +179,41 @@ exports.updateAreaInCity = async (req, res) => {
       });
     }
 
-    // Update area
+    // Update area - preserve _id
     city.areas[areaIndex] = {
-      ...city.areas[areaIndex].toObject(),
+      _id: city.areas[areaIndex]._id,
       name,
       shippingPrice: parseFloat(shippingPrice),
-      isActive: true, // Keep active
+      isActive: true,
     };
 
     await city.save();
     const populatedCity = await CityArea.findById(city._id).lean();
-
     res.json({ success: true, city: populatedCity });
   } catch (error) {
     res.status(400).json({ success: false, error: error.message });
+  }
+};
+
+exports.toggleAreaStatus = async (req, res) => {
+  try {
+    const { areaId } = req.params;
+    const city = await CityArea.findOne({
+      "areas._id": areaId,
+      isActive: true,
+    });
+
+    if (!city) {
+      return res.status(404).json({ success: false, error: "Area not found" });
+    }
+
+    const area = city.areas.id(areaId);
+    area.isActive = !area.isActive;
+    await city.save();
+
+    const populatedCity = await CityArea.findById(city._id).lean();
+    res.json({ success: true, city: populatedCity });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
   }
 };

@@ -6,17 +6,10 @@ const areaSchema = new mongoose.Schema(
       en: { type: String, required: true },
       ar: { type: String, required: true },
     },
-    shippingPrice: {
-      type: Number,
-      required: true,
-      min: 0,
-    },
-    isActive: {
-      type: Boolean,
-      default: true,
-    },
+    shippingPrice: { type: Number, required: true, min: 0 },
+    isActive: { type: Boolean, default: true },
   },
-  { timestamps: true }
+  { _id: true, timestamps: true }
 );
 
 const citySchema = new mongoose.Schema(
@@ -33,10 +26,7 @@ const citySchema = new mongoose.Schema(
       ar: { type: String, required: true, trim: true },
     },
     areas: [areaSchema],
-    isActive: {
-      type: Boolean,
-      default: true,
-    },
+    isActive: { type: Boolean, default: true },
   },
   { timestamps: true }
 );
