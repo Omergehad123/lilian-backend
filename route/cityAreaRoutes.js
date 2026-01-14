@@ -145,12 +145,24 @@ router.put("/areas/:areaId/toggle", authMiddleware, async (req, res) => {
 
 module.exports = router;
 
-// ✅ ADD THIS ROUTE (same pattern as add-area)
-router.put("/update-area", authMiddleware, async (req, res) => {
+router.post("/update-area", authMiddleware, async (req, res) => {
   try {
     const { cityId, areaId, name, shippingPrice } = req.body;
-    const city = await CityArea.findOne({ _id: cityId, isActive: true });
 
+    if (
+      !cityId ||
+      !areaId ||
+      !name?.en ||
+      !name?.ar ||
+      shippingPrice === undefined
+    ) {
+      return res.status(400).json({
+        success: false,
+        error: "cityId, areaId, name (en/ar), and shippingPrice are required",
+      });
+    }
+
+    const city = await CityArea.findOne({ _id: cityId, isActive: true });
     if (!city) {
       return res.status(404).json({ success: false, error: "City not found" });
     }
@@ -160,21 +172,6 @@ router.put("/update-area", authMiddleware, async (req, res) => {
     );
     if (areaIndex === -1) {
       return res.status(404).json({ success: false, error: "Area not found" });
-    }
-
-    // Check duplicate names
-    const duplicateArea = city.areas.find(
-      (area, index) =>
-        index !== areaIndex &&
-        (area.name.en.toLowerCase() === name.en.toLowerCase() ||
-          area.name.ar.toLowerCase() === name.ar.toLowerCase())
-    );
-
-    if (duplicateArea) {
-      return res.status(400).json({
-        success: false,
-        error: "Area name already exists in this city",
-      });
     }
 
     // Update area
