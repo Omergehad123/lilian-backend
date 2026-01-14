@@ -1,35 +1,18 @@
 const multer = require("multer");
 const path = require("path");
-const fs = require("fs").promises;
+const { v2: cloudinary } = require("cloudinary");
+const streamifier = require("streamifier"); 
 const AppError = require("../../utils/appError");
 
-// Ensure upload directory exists
-const ensureUploadDir = async () => {
-  const uploadDir = "uploads/products";
-  try {
-    await fs.mkdir(uploadDir, { recursive: true });
-  } catch (err) {
-    console.error("Error creating upload directory:", err);
-  }
-};
-
-// Call once at startup
-ensureUploadDir();
-
-const storage = multer.diskStorage({
-  destination: async function (req, file, cb) {
-    try {
-      await fs.mkdir("uploads/products", { recursive: true });
-      cb(null, "uploads/products/");
-    } catch (err) {
-      cb(err, null);
-    }
-  },
-  filename: function (req, file, cb) {
-    const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
-    cb(null, "product-" + uniqueSuffix + path.extname(file.originalname));
-  },
+// Configure Cloudinary
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET,
 });
+
+// Local temp storage for multer
+const storage = multer.memoryStorage(); // Store in memory, not disk
 
 const fileFilter = (req, file, cb) => {
   const filetypes = /jpeg|jpg|png|gif/;
@@ -37,18 +20,16 @@ const fileFilter = (req, file, cb) => {
   const extname = filetypes.test(path.extname(file.originalname).toLowerCase());
 
   if (mimetype && extname) {
-    return cb(null, true);
+    cb(null, true);
   } else {
-    cb(new AppError("Images only! (jpeg, jpg, png, gif)", 400), false);
+    cb(new AppError("Images only!", 400), false);
   }
 };
 
 const upload = multer({
   storage,
-  limits: {
-    fileSize: 5 * 1024 * 1024, // 5MB limit per image
-  },
+  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB
   fileFilter,
 });
 
-module.exports = upload;
+module.exports = { upload, cloudinary };

@@ -4,14 +4,14 @@ const productsController = require("../App/controllers/ProductsContoller");
 const verifyAdminToken = require("../App/middleware/verifyAdminToken");
 const allowTo = require("../App/middleware/allowTo");
 const userRoles = require("../utils/roles");
-const upload = require("../App/middleware/multerConfig");
+const { upload } = require("../App/middleware/multerConfig");
 
 router.get("/", productsController.getAllProducts);
 router.get("/:slug", productsController.getProduct);
 
 router.post(
   "/",
-  upload.array("images", 5), // ✅ Support up to 5 images
+  upload.array("images", 5),
   verifyAdminToken,
   allowTo(userRoles.ADMIN, userRoles.MANAGER),
   productsController.addProducts
@@ -26,7 +26,7 @@ router.delete(
 
 router.patch(
   "/:id",
-  upload.array("images", 5), // ✅ Support adding more images
+  upload.array("images", 5),
   verifyAdminToken,
   allowTo(userRoles.ADMIN, userRoles.MANAGER),
   productsController.updateProduct
