@@ -16,17 +16,16 @@ const userRoles = require("../utils/roles");
 // ✅ ADMIN ROUTES (BEARER TOKEN)
 router.get(
   "/admin/all",
-  verifyToken,
+  verifyCookieToken,
   allowTo(userRoles.ADMIN, userRoles.MANAGER),
   getAllOrders
 );
 router.patch(
   "/:id/status",
-  verifyToken,
+  verifyCookieToken,
   allowTo(userRoles.ADMIN, userRoles.MANAGER),
   updateOrderStatus
 );
-
 // ✅ CUSTOMER ROUTES (COOKIE AUTH)
 router.post("/", verifyCookieToken, createOrder);
 router.get("/", verifyCookieToken, getOrders);

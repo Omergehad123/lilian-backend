@@ -2,20 +2,13 @@ const express = require("express");
 const router = express.Router();
 const userController = require("../App/controllers/usersController");
 const verifyToken = require("../App/middleware/verifyToken");
-const verifyCookieToken = require("../App/middleware/verifyCookieToken");
-const allowTo = require("../App/middleware/allowTo");
-const userRoles = require("../utils/roles");
 
 router.post("/guest-login", userController.loginAsGuest);
 
 router.get("/", verifyToken, userController.getAllUser);
 
-router.get(
-  "/admin",
-  verifyToken,
-  allowTo(userRoles.ADMIN),
-  userController.getAllUsersAdmin
-);
+router.get("/admin", verifyToken, userController.getAllUsersAdmin);
+
 router.post("/login", userController.login);
 
 router.post("/register", userController.register);
