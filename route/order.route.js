@@ -6,23 +6,23 @@ const {
   getOrder,
   getAllOrders,
   updateOrderStatus,
-  deleteOrder, // ✅ IMPORTED
+  deleteOrder,
 } = require("../App/controllers/OrderController");
 const verifyCookieToken = require("../App/middleware/verifyCookieToken");
-const verifyToken = require("../App/middleware/verifyToken");
 const allowTo = require("../App/middleware/allowTo");
 const userRoles = require("../utils/roles");
+const verifyAdminToken = require("../App/middleware/verifyAdminToken");
 
 // ✅ ADMIN ROUTES (BEARER TOKEN)
 router.get(
   "/admin/all",
-  verifyCookieToken,
+  verifyAdminToken,
   allowTo(userRoles.ADMIN, userRoles.MANAGER),
   getAllOrders
 );
 router.patch(
   "/:id/status",
-  verifyCookieToken,
+  verifyAdminToken,
   allowTo(userRoles.ADMIN, userRoles.MANAGER),
   updateOrderStatus
 );
