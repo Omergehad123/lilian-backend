@@ -70,7 +70,21 @@ const addProducts = asyncWrapper(async (req, res, next) => {
 });
 
 const getAllProducts = asyncWrapper(async (req, res) => {
-  const products = await Product.find({ isAvailable: true });
+  // ✅ ADMIN PANEL: Show ALL products (available + unavailable)
+  // ✅ CUSTOMER FRONTEND: Use query param ?customer=true
+  const isCustomerView = req.query.customer === "true";
+
+  if (isCustomerView) {
+    // Customer view - only available products
+    const products = await Product.find({ isAvailable: true });
+    return res.json({
+      status: httpStatusText.SUCCESS,
+      data: products,
+    });
+  }
+
+  // Admin view - ALL products (like before)
+  const products = await Product.find();
   res.json({
     status: httpStatusText.SUCCESS,
     data: products,
