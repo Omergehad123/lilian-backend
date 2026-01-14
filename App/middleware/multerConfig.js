@@ -1,8 +1,7 @@
 const multer = require("multer");
-const path = require("path");
 const { v2: cloudinary } = require("cloudinary");
-const streamifier = require("streamifier"); 
-const AppError = require("../../utils/appError");
+const streamifier = require("streamifier");
+const path = require("path");
 
 // Configure Cloudinary
 cloudinary.config({
@@ -11,8 +10,8 @@ cloudinary.config({
   api_secret: process.env.CLOUDINARY_API_SECRET,
 });
 
-// Local temp storage for multer
-const storage = multer.memoryStorage(); // Store in memory, not disk
+// Memory storage (no disk needed for Render)
+const storage = multer.memoryStorage();
 
 const fileFilter = (req, file, cb) => {
   const filetypes = /jpeg|jpg|png|gif/;
@@ -20,9 +19,9 @@ const fileFilter = (req, file, cb) => {
   const extname = filetypes.test(path.extname(file.originalname).toLowerCase());
 
   if (mimetype && extname) {
-    cb(null, true);
+    return cb(null, true);
   } else {
-    cb(new AppError("Images only!", 400), false);
+    cb(new Error("Images only! (jpeg, jpg, png, gif)"), false);
   }
 };
 
@@ -32,4 +31,33 @@ const upload = multer({
   fileFilter,
 });
 
-module.exports = { upload, cloudinary };
+// ✅ FIXED: uploadToCloudinary function
+const uploadToCloudinary = (buffer) => {
+  return new Promise((resolve, reject) => {
+    const uploadStream = cloudinary.uploader.upload_stream(
+      {
+        folder: "lilian-products",
+        resource_type: "image",
+        transformation: [
+          { width: 1000, height: 1000, crop: "limit" },
+          { quality: "auto" },
+        ],
+      },
+      (error, result) => {
+        if (error) {
+          console.error("Cloudinary upload error:", error);
+          reject(error);
+        } else {
+          resolve(result.secure_url);
+        }
+      }
+    );
+    streamifier.createReadStream(buffer).pipe(uploadStream);
+  });
+};
+
+module.exports = {
+  upload,
+  uploadToCloudinary, // ✅ EXPORTED CORRECTLY
+  cloudinary,
+};
