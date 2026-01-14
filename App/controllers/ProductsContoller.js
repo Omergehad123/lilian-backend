@@ -3,6 +3,8 @@ const asyncWrapper = require("../middleware/asyncWrapper");
 const AppError = require("../../utils/appError");
 const httpStatusText = require("../../utils/httpStatusText");
 const slugify = require("slugify");
+const fs = require("fs").promises;
+const path = require("path");
 
 const addProducts = asyncWrapper(async (req, res, next) => {
   const products = Array.isArray(req.body) ? req.body : [req.body];
@@ -22,14 +24,27 @@ const addProducts = asyncWrapper(async (req, res, next) => {
       trim: true,
     });
 
+    // Handle images: prioritize files from multer, fallback to URL
+    const images = [];
+    if (req.files && req.files.length > 0) {
+      req.files.forEach((file) => {
+        images.push(`/uploads/products/${file.filename}`);
+      });
+    } else if (prod.image) {
+      // Legacy: single image URL
+      images.push(prod.image);
+    }
+
     return {
       ...prod,
-      slug: `${baseSlug}-${Date.now()}-${index}`, // 🔥 unique 100%
+      slug: `${baseSlug}-${Date.now()}-${index}`,
       actualPrice: Number(prod.actualPrice),
       price:
         prod.price !== undefined && prod.price !== ""
           ? Number(prod.price)
           : Number(prod.actualPrice),
+      images, // Always use images array
+      image: images[0] || prod.image, // Keep legacy field for compatibility
     };
   });
 
@@ -50,7 +65,6 @@ const toggleProductAvailability = asyncWrapper(async (req, res, next) => {
     return next(new AppError("Product not found", 404));
   }
 
-  // Toggle availability
   product.isAvailable = !product.isAvailable;
   await product.save();
 
@@ -66,7 +80,7 @@ const toggleProductAvailability = asyncWrapper(async (req, res, next) => {
 });
 
 const getAllProducts = asyncWrapper(async (req, res) => {
-  const products = await Product.find();
+  const products = await Product.find().populate("images");
   res.json({
     status: httpStatusText.SUCCESS,
     data: products,
@@ -86,10 +100,24 @@ const getProduct = asyncWrapper(async (req, res, next) => {
 });
 
 const deleteProduct = asyncWrapper(async (req, res, next) => {
-  const product = await Product.findByIdAndDelete(req.params.id);
+  const product = await Product.findById(req.params.id);
   if (!product) {
     return next(new AppError("Product not found", 404));
   }
+
+  // Delete associated images
+  if (product.images && product.images.length > 0) {
+    for (const imagePath of product.images) {
+      const fullPath = path.join(__dirname, "..", "..", imagePath);
+      try {
+        await fs.unlink(fullPath).catch(() => {}); // Ignore if file doesn't exist
+      } catch (err) {
+        console.error("Error deleting image:", fullPath, err);
+      }
+    }
+  }
+
+  await Product.findByIdAndDelete(req.params.id);
 
   res.json({
     status: httpStatusText.SUCCESS,
@@ -101,7 +129,7 @@ const updateProduct = asyncWrapper(async (req, res, next) => {
   const { id } = req.params;
   const updateData = { ...req.body };
 
-  // If name.en is provided, update slug
+  // Handle slug update
   if (updateData.name?.en) {
     const baseSlug = slugify(updateData.name.en, {
       lower: true,
@@ -111,7 +139,21 @@ const updateProduct = asyncWrapper(async (req, res, next) => {
     updateData.slug = `${baseSlug}-${Date.now()}`;
   }
 
-  // Convert price fields to numbers if provided
+  // Handle new images upload
+  if (req.files && req.files.length > 0) {
+    // Get existing product to preserve old images if not replacing all
+    const existingProduct = await Product.findById(id);
+    const currentImages = existingProduct?.images || [];
+
+    // Add new images
+    const newImages = req.files.map(
+      (file) => `/uploads/products/${file.filename}`
+    );
+    updateData.images = [...currentImages, ...newImages];
+    updateData.image = newImages[0] || currentImages[0]; // Main image
+  }
+
+  // Convert price fields
   if (updateData.actualPrice !== undefined) {
     updateData.actualPrice = Number(updateData.actualPrice);
   }

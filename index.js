@@ -44,7 +44,7 @@ app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true }));
 
 // Static files
-app.use("/Uploads", express.static(path.join(__dirname, "Uploads")));
+app.use("/uploads", express.static("uploads"));
 app.set("trust proxy", 1);
 
 // Cookie parser
