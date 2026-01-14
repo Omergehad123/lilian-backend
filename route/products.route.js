@@ -1,8 +1,7 @@
 const express = require("express");
 const router = express.Router();
-
 const productsController = require("../App/controllers/ProductsContoller");
-const verifyToken = require("../App/middleware/verifyToken");
+const verifyAdminToken = require("../App/middleware/verifyAdminToken"); // ✅ CHANGE THIS
 const allowTo = require("../App/middleware/allowTo");
 const userRoles = require("../utils/roles");
 
@@ -11,28 +10,28 @@ router.get("/:slug", productsController.getProduct);
 
 router.post(
   "/",
-  verifyToken,
+  verifyAdminToken, // ✅ FIXED
   allowTo(userRoles.ADMIN, userRoles.MANAGER),
   productsController.addProducts
 );
 
 router.delete(
   "/:id",
-  verifyToken,
+  verifyAdminToken, // ✅ FIXED
   allowTo(userRoles.ADMIN),
   productsController.deleteProduct
 );
 
 router.patch(
   "/:id",
-  verifyToken,
+  verifyAdminToken, // ✅ FIXED
   allowTo(userRoles.ADMIN, userRoles.MANAGER),
   productsController.updateProduct
 );
 
 router.patch(
   "/:id/availability",
-  verifyToken,
+  verifyAdminToken, // ✅ FIXED
   allowTo(userRoles.ADMIN, userRoles.MANAGER),
   productsController.toggleProductAvailability
 );
