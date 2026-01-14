@@ -234,12 +234,20 @@ const loginAsGuest = asyncWrapper(async (req, res, next) => {
   });
 });
 
-const getMe = async (req, res) => {
+const getMe = async (req, res, next) => {
   try {
-    const user = await User.findById(req.user._id).select("-password");
-    res.json({ user });
+    const user = await User.findById(req.user.id).select("-password");
+
+    if (!user) {
+      return next(new AppError("User not found", 404));
+    }
+
+    res.json({
+      status: httpStatusText.SUCCESS,
+      data: { user },
+    });
   } catch (err) {
-    res.status(500).json({ message: "Server error" });
+    next(err);
   }
 };
 
