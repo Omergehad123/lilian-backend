@@ -12,7 +12,7 @@ router.get("/", verifyToken, userController.getAllUser);
 
 router.get(
   "/admin",
-  verifyCookieToken,
+  verifyToken,
   allowTo(userRoles.ADMIN),
   userController.getAllUsersAdmin
 );
