@@ -2,12 +2,22 @@ require("dotenv").config();
 const express = require("express");
 const mongoose = require("mongoose");
 const path = require("path");
-const multer = require("multer");
+const fs = require("fs").promises; // ✅ ADDED
 const cors = require("cors");
 const httpStatusText = require("./utils/httpStatusText");
 
 const app = express();
-const upload = multer({ dest: "./Uploads/" });
+
+// ======== CRITICAL FIX 1: Create uploads directory on startup ✅ ========
+const ensureUploadDir = async () => {
+  try {
+    await fs.mkdir("uploads/products", { recursive: true });
+    console.log("✅ Uploads directory ready");
+  } catch (err) {
+    console.error("❌ Uploads directory error:", err);
+  }
+};
+ensureUploadDir();
 
 // ======== Environment Variables ========
 const PORT = process.env.PORT || 5000;
@@ -23,8 +33,8 @@ mongoose
   .catch((err) => console.error("❌ MongoDB connection error:", err));
 
 // ======== CRITICAL: WEBHOOK ROUTES FIRST (BEFORE JSON PARSER) ========
-const paymentRouter = require("./route/paymentRoutes"); // Load payment routes early
-app.use("/api/payment/webhook", paymentRouter); // Raw webhook endpoint
+const paymentRouter = require("./route/paymentRoutes");
+app.use("/api/payment/webhook", paymentRouter);
 
 // ======== Middleware (AFTER webhook) ========
 // CORS setup
@@ -43,8 +53,8 @@ app.use(
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true }));
 
-// Static files
-app.use("/uploads", express.static("uploads"));
+// ✅ CRITICAL FIX 2: Serve static files BEFORE routes (with correct path)
+app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 app.set("trust proxy", 1);
 
 // Cookie parser
@@ -58,11 +68,9 @@ const orderRouter = require("./route/order.route");
 const cityAreaRoutes = require("./route/cityAreaRoutes");
 const promoRoute = require("./route/promos");
 
-// === Remove any Google sign-in related code here - nothing present ===
-// All other routers
 app.use("/api/products", productsRouter);
 app.use("/api/users", usersRouter);
-app.use("/api/payment", paymentRouter); // Normal payment routes
+app.use("/api/payment", paymentRouter);
 app.use("/api/orders", orderRouter);
 app.use("/api/city-areas", cityAreaRoutes);
 app.use("/api/promos", promoRoute);
