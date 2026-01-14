@@ -163,3 +163,67 @@ exports.toggleAreaStatus = async (req, res) => {
     res.status(500).json({ success: false, error: error.message });
   }
 };
+
+// ✅ ADD THIS FUNCTION to your controller exports
+exports.updateAreaInCity = async (req, res) => {
+  try {
+    const { cityId, areaId, name, shippingPrice } = req.body;
+
+    // Validation
+    if (
+      !cityId ||
+      !areaId ||
+      !name?.en ||
+      !name?.ar ||
+      shippingPrice === undefined
+    ) {
+      return res.status(400).json({
+        success: false,
+        error: "cityId, areaId, name (en/ar), and shippingPrice are required",
+      });
+    }
+
+    const city = await CityArea.findOne({ _id: cityId, isActive: true });
+    if (!city) {
+      return res.status(404).json({ success: false, error: "City not found" });
+    }
+
+    // Find and update the area
+    const areaIndex = city.areas.findIndex(
+      (area) => area._id.toString() === areaId
+    );
+    if (areaIndex === -1) {
+      return res.status(404).json({ success: false, error: "Area not found" });
+    }
+
+    // Check for duplicate names (excluding current area)
+    const duplicateArea = city.areas.find(
+      (area, index) =>
+        index !== areaIndex &&
+        (area.name.en.toLowerCase() === name.en.toLowerCase() ||
+          area.name.ar.toLowerCase() === name.ar.toLowerCase())
+    );
+
+    if (duplicateArea) {
+      return res.status(400).json({
+        success: false,
+        error: "Area name already exists in this city",
+      });
+    }
+
+    // Update area
+    city.areas[areaIndex] = {
+      ...city.areas[areaIndex].toObject(),
+      name,
+      shippingPrice: parseFloat(shippingPrice),
+      isActive: true, // Keep active
+    };
+
+    await city.save();
+    const populatedCity = await CityArea.findById(city._id).lean();
+
+    res.json({ success: true, city: populatedCity });
+  } catch (error) {
+    res.status(400).json({ success: false, error: error.message });
+  }
+};
