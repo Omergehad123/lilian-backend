@@ -2,13 +2,13 @@ require("dotenv").config();
 const express = require("express");
 const mongoose = require("mongoose");
 const path = require("path");
-const fs = require("fs").promises; // ✅ ADDED
+const fs = require("fs").promises;
 const cors = require("cors");
 const httpStatusText = require("./utils/httpStatusText");
 
 const app = express();
 
-// ======== CRITICAL FIX 1: Create uploads directory on startup ✅ ========
+// Create uploads directory
 const ensureUploadDir = async () => {
   try {
     await fs.mkdir("uploads/products", { recursive: true });
@@ -19,25 +19,19 @@ const ensureUploadDir = async () => {
 };
 ensureUploadDir();
 
-// ======== Environment Variables ========
 const PORT = process.env.PORT || 5000;
 const DB_URL = process.env.DB_URL;
-const ALLOWED_ORIGINS = process.env.ALLOWED_ORIGINS
-  ? process.env.ALLOWED_ORIGINS.split(",")
-  : ["http://localhost:5173"];
 
-// ======== Database ========
 mongoose
   .connect(DB_URL)
   .then(() => console.log("✅ Connected to MongoDB"))
   .catch((err) => console.error("❌ MongoDB connection error:", err));
 
-// ======== CRITICAL: WEBHOOK ROUTES FIRST (BEFORE JSON PARSER) ========
+// Webhook routes FIRST
 const paymentRouter = require("./route/paymentRoutes");
 app.use("/api/payment/webhook", paymentRouter);
 
-// ======== Middleware (AFTER webhook) ========
-// CORS setup
+// Middleware
 app.use(
   cors({
     origin: [
@@ -49,19 +43,15 @@ app.use(
   })
 );
 
-// Parse JSON (AFTER webhook)
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true }));
-
-// ✅ CRITICAL FIX 2: Serve static files BEFORE routes (with correct path)
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 app.set("trust proxy", 1);
 
-// Cookie parser
 const cookieParser = require("cookie-parser");
 app.use(cookieParser());
 
-// ======== ALL ROUTES (AFTER middleware) ========
+// Routes
 const ClosedSchedul = require("./route/ClosedSchedul.route");
 const productsRouter = require("./route/products.route");
 const usersRouter = require("./route/users.route");
@@ -69,13 +59,67 @@ const orderRouter = require("./route/order.route");
 const cityAreaRoutes = require("./route/cityAreaRoutes");
 const promoRoute = require("./route/promos");
 
-app.use("/api/is-today-closed", ClosedSchedul);
+app.use("/api/admin", ClosedSchedul); // ✅ FIXED ROUTE MOUNTING
 app.use("/api/products", productsRouter);
 app.use("/api/users", usersRouter);
 app.use("/api/payment", paymentRouter);
 app.use("/api/orders", orderRouter);
 app.use("/api/city-areas", cityAreaRoutes);
 app.use("/api/promos", promoRoute);
+
+// ✅ SCHEDULE ROUTES - PUBLIC READ, ADMIN WRITE
+app.get("/api/admin/is-today-closed", async (req, res) => {
+  try {
+    const ClosedSchedule = require("./models/ClosedSchedule");
+    const today = new Date();
+    const todayString = today.toISOString().split("T")[0];
+
+    const isClosed = await ClosedSchedule.findOne({ date: todayString });
+    const currentHour = new Date().getHours();
+    const timeBasedClosed = currentHour >= 21;
+
+    res.json({
+      isClosed: !!isClosed || timeBasedClosed,
+      date: todayString,
+      timeBasedClosed,
+      manuallyClosed: !!isClosed,
+    });
+  } catch (error) {
+    console.error("Check closed error:", error);
+    res.status(500).json({ success: false, message: "Server error" });
+  }
+});
+
+// Import verifyAdminToken at bottom to avoid circular dependency
+const verifyAdminToken = require("./App/middleware/verifyAdminToken"); // Adjust path
+app.post(
+  "/api/admin/close-today-schedule",
+  verifyAdminToken,
+  async (req, res) => {
+    try {
+      const ClosedSchedule = require("./models/ClosedSchedule");
+      const today = new Date();
+      const todayString = today.toISOString().split("T")[0];
+
+      await ClosedSchedule.create({
+        date: todayString,
+        closedBy: req.user.id,
+        closedAt: new Date(),
+      });
+
+      res.json({
+        success: true,
+        message: `Today's schedule (${todayString}) closed successfully`,
+        closedDate: todayString,
+      });
+    } catch (error) {
+      console.error("Close schedule error:", error);
+      res
+        .status(500)
+        .json({ success: false, message: "Failed to close schedule" });
+    }
+  }
+);
 
 // Promo restore endpoint
 app.post("/api/promos/:code/restore", async (req, res) => {
@@ -113,17 +157,16 @@ app.post("/api/promos/:code/restore", async (req, res) => {
   }
 });
 
-// ======== 404 Handler ========
+// 404 Handler
 app.use((req, res, next) => {
   const error = new Error("This resource is not available");
   error.statusCode = 404;
   next(error);
 });
 
-// ======== Global Error Handler ========
+// Global Error Handler
 app.use((error, req, res, next) => {
   console.error("GLOBAL ERROR:", error.message);
-
   const statusCode = error.statusCode || 500;
   res.status(statusCode).json({
     status: httpStatusText.ERROR,
@@ -131,10 +174,6 @@ app.use((error, req, res, next) => {
   });
 });
 
-// ======== Start Server ========
 app.listen(PORT, () => {
   console.log(`🚀 Server running on port ${PORT}`);
-  console.log(
-    `📝 Webhook ready: http://localhost:${PORT}/api/payment/webhook/myfatoorah`
-  );
 });

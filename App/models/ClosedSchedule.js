@@ -2,7 +2,7 @@ const mongoose = require("mongoose");
 
 const closedScheduleSchema = new mongoose.Schema({
   date: {
-    type: String, // YYYY-MM-DD
+    type: String,
     required: true,
     unique: true,
   },
