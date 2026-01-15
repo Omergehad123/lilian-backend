@@ -97,7 +97,7 @@ app.post(
   verifyAdminToken,
   async (req, res) => {
     try {
-      const ClosedSchedule = require("./models/ClosedSchedule");
+      const ClosedSchedule = require("./App/models/ClosedSchedule");
       const today = new Date();
       const todayString = today.toISOString().split("T")[0];
 
