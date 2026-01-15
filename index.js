@@ -70,7 +70,7 @@ app.use("/api/promos", promoRoute);
 // ✅ SCHEDULE ROUTES - PUBLIC READ, ADMIN WRITE
 app.get("/api/admin/is-today-closed", async (req, res) => {
   try {
-    const ClosedSchedule = require("./models/ClosedSchedule");
+    const ClosedSchedule = require("./App/models/ClosedSchedule");
     const today = new Date();
     const todayString = today.toISOString().split("T")[0];
 
