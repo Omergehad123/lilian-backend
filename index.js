@@ -62,12 +62,14 @@ const cookieParser = require("cookie-parser");
 app.use(cookieParser());
 
 // ======== ALL ROUTES (AFTER middleware) ========
+const ClosedSchedul = require("./route/ClosedSchedul.route");
 const productsRouter = require("./route/products.route");
 const usersRouter = require("./route/users.route");
 const orderRouter = require("./route/order.route");
 const cityAreaRoutes = require("./route/cityAreaRoutes");
 const promoRoute = require("./route/promos");
 
+app.use("/api/is-today-closed", ClosedSchedul);
 app.use("/api/products", productsRouter);
 app.use("/api/users", usersRouter);
 app.use("/api/payment", paymentRouter);
