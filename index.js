@@ -5,7 +5,7 @@ const path = require("path");
 const fs = require("fs").promises;
 const cors = require("cors");
 const httpStatusText = require("./utils/httpStatusText");
-
+const verifyAdminToken = require("./App/middleware/verifyAdminToken"); // Adjust path
 const app = express();
 
 // Create uploads directory
@@ -90,8 +90,29 @@ app.get("/api/admin/is-today-closed", async (req, res) => {
   }
 });
 
+app.post("/api/admin/open-today-schedule", async (req, res) => {
+  try {
+    const ClosedSchedule = require("./App/models/ClosedSchedule");
+    const today = new Date();
+    const todayString = today.toISOString().split("T")[0];
+
+    // Delete the closed record to OPEN it
+    await ClosedSchedule.deleteOne({ date: todayString });
+
+    res.json({
+      success: true,
+      message: `Today's schedule (${todayString}) opened successfully`,
+      closedDate: null,
+    });
+  } catch (error) {
+    console.error("Open schedule error:", error);
+    res
+      .status(500)
+      .json({ success: false, message: "Failed to open schedule" });
+  }
+});
+
 // Import verifyAdminToken at bottom to avoid circular dependency
-const verifyAdminToken = require("./App/middleware/verifyAdminToken"); // Adjust path
 app.post(
   "/api/admin/close-today-schedule",
   verifyAdminToken,
