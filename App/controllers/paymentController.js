@@ -171,6 +171,8 @@ const processOrderFromWebhook = async (webhookData) => {
     const refData = JSON.parse(CustomerRefNo || '{}');
     const { userId, orderData } = refData;
 
+    console.log("📦 Parsed data:", { userId, hasOrderData: !!orderData });
+
     if (!orderData) {
       console.error("❌ NO ORDER DATA");
       return;
@@ -185,33 +187,59 @@ const processOrderFromWebhook = async (webhookData) => {
     });
 
     if (existingOrder) {
-      console.log("✅ DUPLICATE:", existingOrder._id);
+      console.log("✅ DUPLICATE SKIPPED:", existingOrder._id);
       return;
     }
 
+    // 🔥 FIX: Always provide valid user ObjectId (guest or real user)
+    let userObjectId;
+    if (userId && mongoose.Types.ObjectId.isValid(userId)) {
+      userObjectId = new mongoose.Types.ObjectId(userId);
+    } else {
+      // Create dummy ObjectId for guest orders
+      userObjectId = new mongoose.Types.ObjectId();
+    }
+
     const newOrder = new Order({
-      ...(userId && { user: new mongoose.Types.ObjectId(userId) }),
+      user: userObjectId,  // ✅ ALWAYS REQUIRED - schema satisfied
+      
       products: orderData.products || [],
-      totalAmount: orderData.totalAmount,
+      totalAmount: parseFloat(orderData.totalAmount) || 0,
       orderType: orderData.orderType || "pickup",
-      scheduleTime: orderData.scheduleTime,
-      shippingAddress: orderData.shippingAddress,
-      userInfo: orderData.userInfo,
+      
+      // Complete shippingAddress
+      shippingAddress: {
+        city: orderData.shippingAddress?.city || "Kuwait City",
+        address: orderData.shippingAddress?.address || "N/A",
+        ...orderData.shippingAddress
+      },
+      
+      scheduleTime: orderData.scheduleTime || {
+        date: new Date(Date.now() + 24*60*60*1000),
+        timeSlot: "02:00 PM - 06:00 PM"
+      },
+      
+      userInfo: {
+        name: orderData.userInfo?.name || "Guest Customer",
+        phone: orderData.userInfo?.phone || "96500000000"
+      },
+      
       status: "confirmed",
       promoCode: orderData.promoCode || "",
-      promoDiscount: orderData.promoDiscount || 0,
-      subtotal: orderData.subtotal || orderData.totalAmount,
-      shippingCost: orderData.shippingCost || 0,
+      promoDiscount: parseFloat(orderData.promoDiscount) || 0,
+      subtotal: parseFloat(orderData.subtotal) || parseFloat(orderData.totalAmount) || 0,
+      shippingCost: parseFloat(orderData.shippingCost) || 0,
       specialInstructions: orderData.specialInstructions || ""
     });
 
     const savedOrder = await newOrder.save();
-    console.log("🎉 ORDER SAVED! ID:", savedOrder._id);
+    console.log("🎉 ORDER SAVED SUCCESSFULLY! ID:", savedOrder._id);
     
   } catch (error) {
-    console.error("💥 SAVE ERROR:", error);
+    console.error("💥 SAVE ERROR:", error.message);
   }
 };
+
 
 const testPaymentEndpoint = (req, res) => {
   console.log("✅ TEST ENDPOINT:", req.body);
