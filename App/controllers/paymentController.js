@@ -1,7 +1,6 @@
 const axios = require("axios");
 const Order = require("../models/order-model");
 
-// 🔥 DEBUG VERSION - TRACKS EVERY URL
 const getCleanUrl = (path, debugLocation) => {
   const rawEnv = process.env.FRONTEND_URL || "https://lilyandelarosekw.com";
   console.log(`🔍 [${debugLocation}] RAW ENV: "${rawEnv}" | LENGTH: ${rawEnv.length}`);
@@ -53,6 +52,7 @@ const createMyFatoorahPayment = async (req, res) => {
     const errorUrl = getCleanUrl("/payment-failed", "CREATE_PAYMENT_ERROR");
     console.log("🔥🔥🔥 URL DEBUG END 🔥🔥🔥\n");
 
+    // 🔥 STEP 1: Call MyFatoorah FIRST (NO DB SAVE YET)
     const response = await axios.post(
       `${process.env.MYFATOORAH_BASE_URL || "https://api.myfatoorah.com"}/v2/ExecutePayment`,
       {
@@ -85,8 +85,8 @@ const createMyFatoorahPayment = async (req, res) => {
     console.log("📄 MyFatoorah CALLBACK URL:", response.data.Data?.CallBackUrl);
     console.log("📄 MyFatoorah ERROR URL:", response.data.Data?.ErrorUrl);
 
+    // 🔥 STEP 2: ONLY SAVE TO DB IF MyFatoorah SUCCEEDS ✅
     if (!response.data.IsSuccess || !response.data.Data?.PaymentURL) {
-      await saveOrderToDB(req.body, response.data.Data?.InvoiceId || null, "failed");
       console.error("❌ MyFatoorah failed:", response.data);
       return res.status(400).json({
         isSuccess: false,
@@ -94,6 +94,7 @@ const createMyFatoorahPayment = async (req, res) => {
       });
     }
 
+    // ✅ MyFatoorah SUCCESS - NOW save order as "pending"
     const invoiceId = response.data.Data.InvoiceId;
     await saveOrderToDB(req.body, invoiceId, "pending");
 
@@ -104,12 +105,15 @@ const createMyFatoorahPayment = async (req, res) => {
       paymentUrl: response.data.Data.PaymentURL,
       invoiceId: invoiceId,
     });
+
   } catch (error) {
     console.error("💥 PAYMENT ERROR:", {
       message: error.message,
       status: error.response?.status,
       data: error.response?.data,
     });
+    
+    // 🔥 NO DB SAVE on ANY error
     res.status(500).json({
       isSuccess: false,
       message: error.response?.data?.Message || error.message || "Payment gateway error",
@@ -117,6 +121,7 @@ const createMyFatoorahPayment = async (req, res) => {
   }
 };
 
+// 🔥 SAME saveOrderToDB function - unchanged
 const saveOrderToDB = async (paymentData, invoiceId, status = "pending") => {
   try {
     const orderData = {
@@ -153,7 +158,7 @@ const saveOrderToDB = async (paymentData, invoiceId, status = "pending") => {
   }
 };
 
-// 🔥 DEBUG VERSION - TRACKING REDIRECTS
+// 🔥 REST OF YOUR FUNCTIONS (unchanged)
 const handlePaymentSuccess = async (req, res) => {
   console.log("\n🚨🚨🚨 SUCCESS CALLBACK HIT 🚨🚨🚨");
   console.log("📥 FULL QUERY:", JSON.stringify(req.query, null, 2));
@@ -279,7 +284,6 @@ const testPaymentEndpoint = (req, res) => {
   });
 };
 
-// 🔥 RENDER DEBUG ENDPOINT - ADD TO CONTROLLER (NOT ROUTES)
 const debugUrlsEndpoint = (req, res) => {
   console.log("🔍 DEBUG URLS HIT - ENV:", `"${process.env.FRONTEND_URL}"`);
   const testCallback = getCleanUrl("/payment-success", "DEBUG_ENDPOINT");
@@ -294,7 +298,6 @@ const debugUrlsEndpoint = (req, res) => {
     timestamp: new Date().toISOString()
   });
 };
-
 
 module.exports = {
   createMyFatoorahPayment,
