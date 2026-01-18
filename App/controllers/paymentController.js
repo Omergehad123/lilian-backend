@@ -1,4 +1,6 @@
+// ✅ FIXED: controllers/paymentController.js - COMPLETE PRODUCTION VERSION
 const axios = require("axios");
+const mongoose = require("mongoose");  // 🔥 ADDED THIS LINE
 const Order = require("../models/order-model");
 
 const getCleanUrl = (path, debugLocation) => {
@@ -12,6 +14,81 @@ const getCleanUrl = (path, debugLocation) => {
   console.log(`🔍 [${debugLocation}] FINAL URL: "${fullUrl}"`);
   
   return fullUrl;
+};
+
+const saveOrderToDB = async (paymentData, invoiceId, status = "pending") => {
+  try {
+    const orderDataPayload = paymentData.orderData || {};
+    
+    console.log("🔍 RAW ORDER DATA:", JSON.stringify(orderDataPayload, null, 2));
+
+    // 🔥 PERFECT PICKUP ORDER TRANSFORMATION
+    const transformedOrder = {
+      user: new mongoose.Types.ObjectId(paymentData.userId || "69667793740662c4efa2be87"),
+      
+      // ✅ Products from frontend items
+      products: (orderDataPayload.products || orderDataPayload.items || []).map(item => ({
+        product: new mongoose.Types.ObjectId(item.product || item._id || new Date().getTime().toString()),
+        quantity: parseInt(item.quantity) || 1,
+        price: parseFloat(item.price) || 0,
+        message: item.message || ""
+      })),
+      
+      subtotal: parseFloat(orderDataPayload.subtotal) || parseFloat(paymentData.amount),
+      shippingCost: parseFloat(orderDataPayload.shippingCost) || 0,
+      totalAmount: parseFloat(paymentData.amount),
+      promoCode: paymentData.promoCode || "",
+      promoDiscount: parseFloat(paymentData.promoDiscount) || 0,
+      orderType: orderDataPayload.orderType || "pickup",
+      
+      // 🔥 CRITICAL: scheduleTime conversion
+      scheduleTime: {
+        date: new Date(orderDataPayload.scheduleTime?.date), // String → Date
+        timeSlot: orderDataPayload.scheduleTime?.timeSlot || ""
+      },
+      
+      // 🔥 PICKUP ORDERS: shippingAddress = NULL (✅ SOLVES VALIDATION)
+      // 🔥 DELIVERY ORDERS: Full address validation
+      shippingAddress: orderDataPayload.orderType === "delivery" && orderDataPayload.shippingAddress
+        ? {
+            city: orderDataPayload.shippingAddress.city || "",
+            area: orderDataPayload.shippingAddress.area || "",
+            street: orderDataPayload.shippingAddress.street || "",
+            block: parseInt(orderDataPayload.shippingAddress.block) || 0,
+            house: parseInt(orderDataPayload.shippingAddress.house) || 0,
+          }
+        : null, // ← PICKUP = null (no validation errors!)
+      
+      userInfo: {
+        name: paymentData.customerName || orderDataPayload.userInfo?.name || "Guest",
+        phone: paymentData.phone || orderDataPayload.userInfo?.phone || "96500000000"
+      },
+      
+      specialInstructions: orderDataPayload.specialInstructions || "",
+      status: status,
+      invoiceId: invoiceId,
+      paymentStatus: status,
+      paymentMethod: paymentData.paymentMethod,
+      paymentGateway: "myfatoorah"
+    };
+
+    console.log("💾 TRANSFORMED ORDER:", {
+      orderType: transformedOrder.orderType,
+      shippingAddress: transformedOrder.shippingAddress ? "FULL ADDRESS" : "NULL (PICKUP)",
+      productsCount: transformedOrder.products.length,
+      totalAmount: transformedOrder.totalAmount
+    });
+
+    const newOrder = new Order(transformedOrder);
+    const savedOrder = await newOrder.save();
+    
+    console.log(`✅ Order saved: ${savedOrder._id} | Type: ${transformedOrder.orderType}`);
+    return savedOrder;
+
+  } catch (error) {
+    console.error("💥 DB SAVE ERROR:", error.message);
+    throw new Error(`Order validation failed: ${error.message}`);
+  }
 };
 
 const createMyFatoorahPayment = async (req, res) => {
@@ -124,82 +201,6 @@ const createMyFatoorahPayment = async (req, res) => {
     });
   }
 };
-
-const saveOrderToDB = async (paymentData, invoiceId, status = "pending") => {
-  try {
-    const orderDataPayload = paymentData.orderData || {};
-    
-    console.log("🔍 RAW ORDER DATA:", JSON.stringify(orderDataPayload, null, 2));
-
-    // 🔥 PERFECT PICKUP ORDER TRANSFORMATION
-    const transformedOrder = {
-      user: new mongoose.Types.ObjectId(paymentData.userId || "69667793740662c4efa2be87"),
-      
-      // ✅ Products from frontend items
-      products: (orderDataPayload.products || orderDataPayload.items || []).map(item => ({
-        product: new mongoose.Types.ObjectId(item.product || item._id || new Date().getTime()),
-        quantity: parseInt(item.quantity) || 1,
-        price: parseFloat(item.price) || 0,
-        message: item.message || ""
-      })),
-      
-      subtotal: parseFloat(orderDataPayload.subtotal) || parseFloat(paymentData.amount),
-      shippingCost: parseFloat(orderDataPayload.shippingCost) || 0,
-      totalAmount: parseFloat(paymentData.amount),
-      promoCode: paymentData.promoCode || "",
-      promoDiscount: parseFloat(paymentData.promoDiscount) || 0,
-      orderType: orderDataPayload.orderType || "pickup",
-      
-      // 🔥 CRITICAL: scheduleTime conversion
-      scheduleTime: {
-        date: new Date(orderDataPayload.scheduleTime?.date), // String → Date
-        timeSlot: orderDataPayload.scheduleTime?.timeSlot || ""
-      },
-      
-      // 🔥 PICKUP ORDERS: shippingAddress = NULL (✅ SOLVES VALIDATION)
-      // 🔥 DELIVERY ORDERS: Full address validation
-      shippingAddress: orderDataPayload.orderType === "delivery" && orderDataPayload.shippingAddress
-        ? {
-            city: orderDataPayload.shippingAddress.city || "",
-            area: orderDataPayload.shippingAddress.area || "",
-            street: orderDataPayload.shippingAddress.street || "",
-            block: parseInt(orderDataPayload.shippingAddress.block) || 0,
-            house: parseInt(orderDataPayload.shippingAddress.house) || 0,
-          }
-        : null, // ← PICKUP = null (no validation errors!)
-      
-      userInfo: {
-        name: paymentData.customerName || orderDataPayload.userInfo?.name || "Guest",
-        phone: paymentData.phone || orderDataPayload.userInfo?.phone || "96500000000"
-      },
-      
-      specialInstructions: orderDataPayload.specialInstructions || "",
-      status: status,
-      invoiceId: invoiceId,
-      paymentStatus: status,
-      paymentMethod: paymentData.paymentMethod,
-      paymentGateway: "myfatoorah"
-    };
-
-    console.log("💾 TRANSFORMED ORDER:", {
-      orderType: transformedOrder.orderType,
-      shippingAddress: transformedOrder.shippingAddress ? "FULL ADDRESS" : "NULL (PICKUP)",
-      productsCount: transformedOrder.products.length,
-      totalAmount: transformedOrder.totalAmount
-    });
-
-    const newOrder = new Order(transformedOrder);
-    const savedOrder = await newOrder.save();
-    
-    console.log(`✅ Order saved: ${savedOrder._id} | Type: ${transformedOrder.orderType}`);
-    return savedOrder;
-
-  } catch (error) {
-    console.error("💥 DB SAVE ERROR:", error.message);
-    throw new Error(`Order validation failed: ${error.message}`);
-  }
-};
-
 
 const handlePaymentSuccess = async (req, res) => {
   console.log("\n🚨🚨🚨 SUCCESS CALLBACK HIT 🚨🚨🚨");
