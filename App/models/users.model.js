@@ -19,7 +19,6 @@ const userSchema = new mongoose.Schema(
     password: {
       type: String,
       required: function () {
-        // ✅ Optional for guests
         return !this.isGuest;
       },
     },
@@ -27,15 +26,13 @@ const userSchema = new mongoose.Schema(
       type: String,
     },
     isGuest: {
-      // ✅ NEW: Guest flag
       type: Boolean,
       default: false,
     },
     guestId: {
-      // ✅ NEW: Track guest users
       type: String,
       unique: true,
-      sparse: true, // allows multiple null values
+      sparse: true,
     },
     role: {
       type: String,

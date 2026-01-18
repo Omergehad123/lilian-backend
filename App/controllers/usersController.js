@@ -8,7 +8,7 @@ const generateJWT = require("../../utils/generateJWT");
 const userRoles = require("../../utils/roles");
 
 const getAllUser = asyncWrapper(async (req, res, next) => {
-  const users = await User.find().select("-password -cart -token"); // Include createdAt by default
+  const users = await User.find().select("-password -cart -token");
 
   if (!users || users.length === 0) {
     return next(new AppError("Users not found", 404));
@@ -178,8 +178,6 @@ const getAllUsersAdmin = asyncWrapper(async (req, res, next) => {
     .sort({ createdAt: -1 })
     .limit(50);
 
-  console.log(`✅ Dashboard: Found ${users.length} users`);
-
   res.json({
     status: httpStatusText.SUCCESS,
     data: { users },
@@ -210,11 +208,10 @@ const loginAsGuest = asyncWrapper(async (req, res, next) => {
     email: guestEmail,
     isGuest: true,
     guestId: guestId,
-    role: userRoles.USER, // ✅ Now this works!
+    role: userRoles.USER,
     cart: [],
   });
 
-  // Generate JWT token for guest
   const token = await generateJWT({
     id: newGuest._id,
     email: newGuest.email,
