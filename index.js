@@ -54,7 +54,7 @@ const usersRouter = require("./route/users.route");
 const orderRouter = require("./route/order.route");
 const cityAreaRoutes = require("./route/cityAreaRoutes");
 const promoRoute = require("./route/promos");
-
+const paymentRouter = require("./route/paymentRoutes")
 app.use("/api/admin", ClosedSchedul); // ✅ FIXED ROUTE MOUNTING
 app.use("/api/products", productsRouter);
 app.use("/api/users", usersRouter);
