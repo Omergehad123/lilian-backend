@@ -1,6 +1,12 @@
 const axios = require("axios");
 const Order = require("../models/order-model");
 
+// 🔥 BULLETPROOF URL HELPER - FIXES DOUBLE SLASH
+const getCleanUrl = (path) => {
+  const base = (process.env.FRONTEND_URL || "https://lilyandelarosekw.com").replace(/\/+$/, '');
+  return `${base}${path.startsWith('/') ? path : '/' + path}`;
+};
+
 const createMyFatoorahPayment = async (req, res) => {
   try {
     console.log("🚀 === PAYMENT CONTROLLER REACHED ===");
@@ -35,7 +41,7 @@ const createMyFatoorahPayment = async (req, res) => {
     const paymentMethodId = paymentMethod === "knet" ? 1 : 2;
     console.log(`🎯 PaymentMethodId: ${paymentMethodId}`);
 
-    // 🔥 MYFATOORAH DIRECT EXECUTE PAYMENT - FIXED URLS
+    // 🔥 MYFATOORAH DIRECT EXECUTE PAYMENT - BULLETPROOF URLS
     const response = await axios.post(
       `${process.env.MYFATOORAH_BASE_URL || "https://api.myfatoorah.com"}/v2/ExecutePayment`,
       {
@@ -44,8 +50,8 @@ const createMyFatoorahPayment = async (req, res) => {
         CustomerName: customerName,
         CustomerEmail: customerEmail,
         CustomerMobile: phone,
-        CallBackUrl: `${process.env.FRONTEND_URL || "https://lilyandelarosekw.com"}/payment-success`,
-        ErrorUrl: `${process.env.FRONTEND_URL || "https://lilyandelarosekw.com"}/payment-failed`,
+        CallBackUrl: getCleanUrl("/payment-success"),
+        ErrorUrl: getCleanUrl("/payment-failed"),
         NotificationOption: "ALL",
         Lang: "en",
         DisplayCurrencyIso: "KWD",
@@ -67,7 +73,6 @@ const createMyFatoorahPayment = async (req, res) => {
     console.log("✅ MyFatoorah Response:", response.data.IsSuccess, !!response.data.Data?.PaymentURL);
 
     if (!response.data.IsSuccess || !response.data.Data?.PaymentURL) {
-      // ✅ Save FAILED order
       await saveOrderToDB(req.body, response.data.Data?.InvoiceId || null, "failed");
       console.error("❌ MyFatoorah failed:", response.data);
       return res.status(400).json({
@@ -81,10 +86,12 @@ const createMyFatoorahPayment = async (req, res) => {
     await saveOrderToDB(req.body, invoiceId, "pending");
 
     console.log("🎉 PAYMENT URL:", response.data.Data.PaymentURL);
+    console.log("✅ CALLBACK URLS:", getCleanUrl("/payment-success"), getCleanUrl("/payment-failed"));
+    
     res.json({
       isSuccess: true,
       paymentUrl: response.data.Data.PaymentURL,
-      invoiceId: invoiceId, // ✅ Return invoiceId for frontend tracking
+      invoiceId: invoiceId,
     });
   } catch (error) {
     console.error("💥 PAYMENT ERROR:", {
@@ -100,7 +107,7 @@ const createMyFatoorahPayment = async (req, res) => {
   }
 };
 
-// ✅ NEW: Save order to database
+// ✅ Save order to database
 const saveOrderToDB = async (paymentData, invoiceId, status = "pending") => {
   try {
     const orderData = {
@@ -109,8 +116,8 @@ const saveOrderToDB = async (paymentData, invoiceId, status = "pending") => {
       customerName: paymentData.customerName,
       customerEmail: paymentData.customerEmail,
       customerPhone: paymentData.phone,
-      invoiceId: invoiceId, // MyFatoorah Invoice ID
-      paymentStatus: status, // pending | paid | failed
+      invoiceId: invoiceId,
+      paymentStatus: status,
       paymentMethod: paymentData.paymentMethod,
       subtotal: parseFloat(paymentData.amount),
       promoCode: paymentData.promoCode || "",
@@ -143,8 +150,11 @@ const handlePaymentSuccess = async (req, res) => {
   const { paymentId, invoiceId } = req.query;
   const id = paymentId || invoiceId;
 
+  console.log("🔗 Clean URLs:", getCleanUrl("/payment-success"), getCleanUrl("/payment-failed"));
+
   if (!id) {
-    return res.redirect(`${process.env.FRONTEND_URL || "https://lilyandelarosekw.com"}/payment-failed`);
+    console.log("❌ No paymentId/invoiceId - redirecting to failed");
+    return res.redirect(getCleanUrl("/payment-failed"));
   }
 
   // ✅ Update order to PAID status
@@ -164,15 +174,13 @@ const handlePaymentSuccess = async (req, res) => {
     }
   }
 
-  res.redirect(
-    `${process.env.FRONTEND_URL || "https://lilyandelarosekw.com"}/payment-success?paymentId=${id}`
-  );
+  console.log("✅ Redirecting to success:", getCleanUrl("/payment-success") + `?paymentId=${id}`);
+  res.redirect(getCleanUrl("/payment-success") + `?paymentId=${id}`);
 };
 
-// ✅ FIXED: Complete Webhook Handler
+// ✅ Complete Webhook Handler
 const handleWebhook = async (req, res) => {
   try {
-    // ✅ Parse raw JSON body
     let webhookData;
     if (req.body && typeof req.body === 'string') {
       webhookData = JSON.parse(req.body);
@@ -184,7 +192,6 @@ const handleWebhook = async (req, res) => {
 
     console.log("🔔 WEBHOOK RECEIVED:", JSON.stringify(webhookData, null, 2));
     
-    // ✅ Verify webhook signature
     const signature = req.headers['mfh-pay-key'];
     console.log("🔑 Webhook signature:", signature ? "PRESENT" : "MISSING");
     
@@ -200,7 +207,6 @@ const handleWebhook = async (req, res) => {
       return res.status(400).json({ error: "Missing InvoiceId" });
     }
 
-    // ✅ Find order
     const order = await Order.findOne({ invoiceId: InvoiceId });
     if (!order) {
       console.log("❌ Order not found for InvoiceId:", InvoiceId);
@@ -209,7 +215,6 @@ const handleWebhook = async (req, res) => {
 
     console.log(`🔄 Updating order ${order._id} | ${order.paymentStatus} → ${PaymentStatus}`);
 
-    // ✅ Handle ALL possible statuses
     switch (PaymentStatus) {
       case "PAID":
         order.paymentStatus = "paid";
