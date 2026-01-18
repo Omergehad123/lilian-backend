@@ -1,3 +1,4 @@
+const crypto = require('crypto'); // ✅ ADD THIS
 const axios = require("axios");
 const mongoose = require("mongoose");
 const Order = require("../models/order-model");
@@ -5,7 +6,7 @@ const Order = require("../models/order-model");
 // 🔥 BULLETPROOF URL CLEANER
 const cleanUrl = (baseUrl, path) => {
   let cleanBase = baseUrl.endsWith('/') ? baseUrl.slice(0, -1) : baseUrl;
-  let cleanPath = path.replace(/^\/+/, '/'); // Remove multiple leading slashes
+  let cleanPath = path.replace(/^\/+/, '/');
   return `${cleanBase}${cleanPath}`;
 };
 
@@ -14,7 +15,6 @@ const createMyFatoorahPayment = async (req, res) => {
     console.log("🚀 === PAYMENT CONTROLLER REACHED ===");
     console.log("📥 FULL REQUEST:", JSON.stringify(req.body, null, 2));
 
-    // Extract basic data
     const paymentMethod = req.body.paymentMethod || req.body.payment_method || "card";
     const amountRaw = req.body.amount;
     const customerName = req.body.customerName || req.body.customer_name || "Guest Customer";
@@ -34,7 +34,6 @@ const createMyFatoorahPayment = async (req, res) => {
       return res.status(400).json({ isSuccess: false, message: "Minimum amount is 0.100 KWD" });
     }
 
-    // API KEY CHECK
     if (!process.env.MYFATOORAH_API_KEY) {
       return res.status(500).json({ isSuccess: false, message: "Payment gateway not configured" });
     }
@@ -46,11 +45,9 @@ const createMyFatoorahPayment = async (req, res) => {
 
     console.log(`🎯 CLEAN URLs: Success=${successUrl} | Error=${errorUrl}`);
 
-    // PAYMENT METHOD ID
     const paymentMethodId = paymentMethod === "knet" ? 1 : 2;
-    console.log(`🎯 PaymentMethodId: ${paymentMethodId}`);
 
-    // EXTRACT FULL ORDER DATA for webhook
+    // FULL ORDER DATA
     const orderData = {
       products: req.body.products || [],
       orderType: req.body.orderType || "pickup",
@@ -59,10 +56,7 @@ const createMyFatoorahPayment = async (req, res) => {
         timeSlot: "02:00 PM - 06:00 PM" 
       },
       shippingAddress: req.body.shippingAddress || {},
-      userInfo: {
-        name: customerName,
-        phone: phone
-      },
+      userInfo: { name: customerName, phone: phone },
       subtotal: req.body.subtotal || amount,
       totalAmount: amount,
       promoCode: req.body.promoCode || "",
@@ -71,7 +65,6 @@ const createMyFatoorahPayment = async (req, res) => {
       specialInstructions: req.body.specialInstructions || ""
     };
 
-    // MYFATOORAH EXECUTE PAYMENT with CLEAN URLs
     const response = await axios.post(
       `${process.env.MYFATOORAH_BASE_URL || "https://api.myfatoorah.com"}/v2/ExecutePayment`,
       {
@@ -80,16 +73,12 @@ const createMyFatoorahPayment = async (req, res) => {
         CustomerName: customerName,
         CustomerEmail: customerEmail,
         CustomerMobile: phone,
-        CallBackUrl: successUrl,        // ✅ NO DOUBLE SLASH
-        ErrorUrl: errorUrl,            // ✅ NO DOUBLE SLASH
+        CallBackUrl: successUrl,
+        ErrorUrl: errorUrl,
         NotificationOption: "ALL",
         Lang: "en",
         DisplayCurrencyIso: "KWD",
-        UserDefinedField: JSON.stringify({
-          userId,
-          orderData,
-          paymentMethod,
-        }),
+        UserDefinedField: JSON.stringify({ userId, orderData, paymentMethod }),
       },
       {
         headers: {
@@ -121,7 +110,6 @@ const createMyFatoorahPayment = async (req, res) => {
       status: error.response?.status,
       data: error.response?.data,
     });
-
     res.status(500).json({
       isSuccess: false,
       message: error.response?.data?.Message || error.message || "Payment gateway error",
@@ -148,52 +136,64 @@ const handlePaymentSuccess = async (req, res) => {
 };
 
 const handleWebhook = async (req, res) => {
-  console.log("🔔 WEBHOOK RECEIVED:", req.body);
+  console.log("🔔 WEBHOOK HIT! Status:", req.body.PaymentStatus);
+  console.log("🔔 FULL PAYLOAD:", JSON.stringify(req.body, null, 2));
   
-  try {
-    const { InvoiceId, PaymentId, PaymentStatus, CustomerRefNo } = req.body;
-
-    if (PaymentStatus !== 'PAID') {
-      console.log("❌ Webhook: Payment not PAID, ignoring");
-      return res.status(200).json({ success: true });
+  // VALIDATE SIGNATURE
+  const signature = req.get('MyFatoorah-Signature');
+  const webhookSecret = process.env.MYFATOORAH_WEBHOOK_SECRET;
+  
+  if (signature && webhookSecret) {
+    const expectedSignature = crypto
+      .createHmac('sha256', webhookSecret)
+      .update(JSON.stringify(req.body), 'utf8')
+      .digest('base64');
+    
+    if (signature !== expectedSignature) {
+      console.error("❌ SIGNATURE FAILED");
+      return res.status(401).json({ success: false });
     }
+    console.log("✅ SIGNATURE VALID ✓");
+  }
 
-    // Parse UserDefinedField data
+  res.status(200).json({ success: true });
+  
+  if (req.body.PaymentStatus === 'PAID') {
+    processOrderFromWebhook(req.body).catch(console.error);
+  }
+};
+
+const processOrderFromWebhook = async (webhookData) => {
+  try {
+    console.log("🔄 PROCESSING ORDER...");
+    
+    const { CustomerRefNo } = webhookData;
     const refData = JSON.parse(CustomerRefNo || '{}');
     const { userId, orderData } = refData;
 
-    if (!userId || !orderData) {
-      console.log("❌ Missing userId or orderData in webhook");
-      return res.status(400).json({ success: false, message: "Invalid webhook data" });
+    if (!orderData) {
+      console.error("❌ NO ORDER DATA");
+      return;
     }
 
-    // Check duplicates by phone + amount (since model lacks paymentId field)
-    const existingOrder = await Order.findOne({ 
+    // DUPLICATE CHECK
+    const existingOrder = await Order.findOne({
       $and: [
         { "userInfo.phone": orderData.userInfo?.phone },
         { totalAmount: orderData.totalAmount }
       ]
     });
-    
+
     if (existingOrder) {
-      console.log("✅ Order already exists:", existingOrder._id);
-      return res.status(200).json({ success: true });
+      console.log("✅ DUPLICATE:", existingOrder._id);
+      return;
     }
 
-    // SAFE ObjectId conversion
-    let userObjectId;
-    try {
-      userObjectId = new mongoose.Types.ObjectId(userId);
-    } catch (error) {
-      console.log("⚠️ Invalid userId, skipping user field:", userId);
-    }
-
-    // CREATE ORDER (matches your schema exactly)
     const newOrder = new Order({
-      ...(userObjectId && { user: userObjectId }),
+      ...(userId && { user: new mongoose.Types.ObjectId(userId) }),
       products: orderData.products || [],
       totalAmount: orderData.totalAmount,
-      orderType: orderData.orderType,
+      orderType: orderData.orderType || "pickup",
       scheduleTime: orderData.scheduleTime,
       shippingAddress: orderData.shippingAddress,
       userInfo: orderData.userInfo,
@@ -205,24 +205,17 @@ const handleWebhook = async (req, res) => {
       specialInstructions: orderData.specialInstructions || ""
     });
 
-    await newOrder.save();
-    console.log("✅ ORDER SAVED TO DB:", newOrder._id);
-
-    res.status(200).json({ success: true });
+    const savedOrder = await newOrder.save();
+    console.log("🎉 ORDER SAVED! ID:", savedOrder._id);
+    
   } catch (error) {
-    console.error("💥 WEBHOOK ERROR:", error);
-    res.status(500).json({ success: false });
+    console.error("💥 SAVE ERROR:", error);
   }
 };
 
 const testPaymentEndpoint = (req, res) => {
-  console.log("✅ TEST ENDPOINT REACHED - NO AUTH!");
-  console.log("📥 PAYLOAD:", req.body);
-  res.json({
-    isSuccess: true,
-    message: "Controller working!",
-    received: req.body,
-  });
+  console.log("✅ TEST ENDPOINT:", req.body);
+  res.json({ isSuccess: true, message: "Working!", received: req.body });
 };
 
 module.exports = {
