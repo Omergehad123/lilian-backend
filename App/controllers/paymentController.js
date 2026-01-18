@@ -144,7 +144,7 @@ const handlePaymentSuccess = async (req, res) => {
   const id = paymentId || invoiceId;
 
   if (!id) {
-    return res.redirect(`${process.env.FRONTEND_URL || "https://lilyandelarosekw.com"}/payment-failed`);
+    return res.redirect(`${process.env.FRONTEND_URL || "https://lilyandelarosekw.com"}payment-failed`);
   }
 
   // ✅ Update order to PAID status
