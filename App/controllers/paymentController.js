@@ -87,7 +87,7 @@ const createMyFatoorahPayment = async (req, res) => {
 
     // 🔥 STEP 2: ONLY SAVE TO DB IF MyFatoorah SUCCEEDS ✅
     if (!response.data.IsSuccess || !response.data.Data?.PaymentURL) {
-      console.error("❌ MyFatoorah failed:", response.data);
+      console.error("❌ MyFatoorah failed - NO DB SAVE:", response.data);
       return res.status(400).json({
         isSuccess: false,
         message: response.data.Message || "Payment execution failed",
@@ -96,6 +96,10 @@ const createMyFatoorahPayment = async (req, res) => {
 
     // ✅ MyFatoorah SUCCESS - NOW save order as "pending"
     const invoiceId = response.data.Data.InvoiceId;
+    
+    // 🔥 ENHANCED ORDER DATA with FULL ADDRESS VALIDATION
+    console.log("🔍 SAVING ORDER DATA:", JSON.stringify(req.body.orderData, null, 2));
+    
     await saveOrderToDB(req.body, invoiceId, "pending");
 
     console.log("🎉 PAYMENT URL:", response.data.Data.PaymentURL);
@@ -107,7 +111,7 @@ const createMyFatoorahPayment = async (req, res) => {
     });
 
   } catch (error) {
-    console.error("💥 PAYMENT ERROR:", {
+    console.error("💥 PAYMENT ERROR - NO DB SAVE:", {
       message: error.message,
       status: error.response?.status,
       data: error.response?.data,
@@ -121,11 +125,14 @@ const createMyFatoorahPayment = async (req, res) => {
   }
 };
 
-// 🔥 SAME saveOrderToDB function - unchanged
+// 🔥 ENHANCED saveOrderToDB with FULL ADDRESS LOGGING
 const saveOrderToDB = async (paymentData, invoiceId, status = "pending") => {
   try {
-    const orderData = {
-      ...paymentData.orderData,
+    const orderDataPayload = paymentData.orderData || {};
+    
+    // 🔥 FULL ADDRESS VALIDATION & LOGGING
+    const fullOrderData = {
+      ...orderDataPayload,
       userId: paymentData.userId,
       customerName: paymentData.customerName,
       customerEmail: paymentData.customerEmail,
@@ -138,16 +145,40 @@ const saveOrderToDB = async (paymentData, invoiceId, status = "pending") => {
       promoDiscount: parseFloat(paymentData.promoDiscount || 0),
       totalAmount: parseFloat(paymentData.amount),
       paymentGateway: "myfatoorah",
-      items: paymentData.orderData?.items || [],
-      shippingAddress: paymentData.orderData?.shippingAddress || null,
-      orderType: paymentData.orderData?.orderType || "pickup",
-      scheduledSlot: paymentData.orderData?.scheduledSlot || null,
-      specialInstructions: paymentData.orderData?.specialInstructions || "",
+      items: orderDataPayload.items || [],
+      
+      // 🔥 ENSURE COMPLETE ADDRESS OBJECT
+      shippingAddress: orderDataPayload.shippingAddress || null,
+      
+      // 🔥 LOG ADDRESS FOR DEBUG
+      ...(orderDataPayload.orderType === "delivery" && {
+        orderType: "delivery",
+        shippingAddress: {
+          city: orderDataPayload.shippingAddress?.city || orderDataPayload.city || "",
+          area: orderDataPayload.shippingAddress?.area || orderDataPayload.area || "",
+          street: orderDataPayload.shippingAddress?.street || orderDataPayload.street || "",
+          block: orderDataPayload.shippingAddress?.block || orderDataPayload.block || "",
+          house: orderDataPayload.shippingAddress?.house || orderDataPayload.house || "",
+          landmark: orderDataPayload.shippingAddress?.landmark || orderDataPayload.landmark || "",
+          additionalInfo: orderDataPayload.shippingAddress?.additionalInfo || ""
+        }
+      }),
+      
+      orderType: orderDataPayload.orderType || "pickup",
+      scheduledSlot: orderDataPayload.scheduledSlot || null,
+      specialInstructions: orderDataPayload.specialInstructions || "",
       createdAt: new Date(),
       updatedAt: new Date(),
     };
 
-    const newOrder = new Order(orderData);
+    console.log("💾 SAVING TO DB:", JSON.stringify({
+      orderType: fullOrderData.orderType,
+      hasShippingAddress: !!fullOrderData.shippingAddress,
+      addressPreview: fullOrderData.shippingAddress,
+      itemsCount: fullOrderData.items?.length || 0
+    }, null, 2));
+
+    const newOrder = new Order(fullOrderData);
     const savedOrder = await newOrder.save();
     
     console.log(`✅ Order saved: ${savedOrder._id} | Status: ${status} | Invoice: ${invoiceId}`);
@@ -158,7 +189,6 @@ const saveOrderToDB = async (paymentData, invoiceId, status = "pending") => {
   }
 };
 
-// 🔥 REST OF YOUR FUNCTIONS (unchanged)
 const handlePaymentSuccess = async (req, res) => {
   console.log("\n🚨🚨🚨 SUCCESS CALLBACK HIT 🚨🚨🚨");
   console.log("📥 FULL QUERY:", JSON.stringify(req.query, null, 2));
@@ -180,7 +210,7 @@ const handlePaymentSuccess = async (req, res) => {
 
   if (invoiceId) {
     try {
-      await Order.findOneAndUpdate(
+      const updatedOrder = await Order.findOneAndUpdate(
         { invoiceId },
         { 
           paymentStatus: "paid", 
@@ -188,7 +218,11 @@ const handlePaymentSuccess = async (req, res) => {
           updatedAt: new Date()
         }
       );
-      console.log(`✅ Success callback updated order for invoice: ${invoiceId}`);
+      if (updatedOrder) {
+        console.log(`✅ Success callback updated order ${updatedOrder._id} for invoice: ${invoiceId}`);
+      } else {
+        console.log(`⚠️ No order found for invoice: ${invoiceId}`);
+      }
     } catch (error) {
       console.error("❌ Success callback update failed:", error);
     }
