@@ -44,8 +44,8 @@ const createMyFatoorahPayment = async (req, res) => {
         CustomerName: customerName,
         CustomerEmail: customerEmail,
         CustomerMobile: phone,
-        CallBackUrl: `${process.env.FRONTEND_URL || "https://lilyandelarosekw.com"}payment-success`,
-        ErrorUrl: `${process.env.FRONTEND_URL || "https://lilyandelarosekw.com"}payment-failed`,
+        CallBackUrl: `${process.env.FRONTEND_URL || "https://lilyandelarosekw.com"}/payment-success`,
+        ErrorUrl: `${process.env.FRONTEND_URL || "https://lilyandelarosekw.com"}/payment-failed`,
         NotificationOption: "ALL",
         Lang: "en",
         DisplayCurrencyIso: "KWD",
@@ -144,7 +144,7 @@ const handlePaymentSuccess = async (req, res) => {
   const id = paymentId || invoiceId;
 
   if (!id) {
-    return res.redirect(`${process.env.FRONTEND_URL || "https://lilyandelarosekw.com"}payment-failed`);
+    return res.redirect(`${process.env.FRONTEND_URL || "https://lilyandelarosekw.com"}/payment-failed`);
   }
 
   // ✅ Update order to PAID status
@@ -165,7 +165,7 @@ const handlePaymentSuccess = async (req, res) => {
   }
 
   res.redirect(
-    `${process.env.FRONTEND_URL || "https://lilyandelarosekw.com"}payment-success?paymentId=${id}`
+    `${process.env.FRONTEND_URL || "https://lilyandelarosekw.com"}/payment-success?paymentId=${id}`
   );
 };
 
