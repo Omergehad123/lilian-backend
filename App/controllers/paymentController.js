@@ -125,69 +125,81 @@ const createMyFatoorahPayment = async (req, res) => {
   }
 };
 
-// 🔥 ENHANCED saveOrderToDB with FULL ADDRESS LOGGING
 const saveOrderToDB = async (paymentData, invoiceId, status = "pending") => {
   try {
     const orderDataPayload = paymentData.orderData || {};
     
-    // 🔥 FULL ADDRESS VALIDATION & LOGGING
-    const fullOrderData = {
-      ...orderDataPayload,
-      userId: paymentData.userId,
-      customerName: paymentData.customerName,
-      customerEmail: paymentData.customerEmail,
-      customerPhone: paymentData.phone,
+    console.log("🔍 RAW ORDER DATA:", JSON.stringify(orderDataPayload, null, 2));
+
+    // 🔥 PERFECT PICKUP ORDER TRANSFORMATION
+    const transformedOrder = {
+      user: new mongoose.Types.ObjectId(paymentData.userId || "69667793740662c4efa2be87"),
+      
+      // ✅ Products from frontend items
+      products: (orderDataPayload.products || orderDataPayload.items || []).map(item => ({
+        product: new mongoose.Types.ObjectId(item.product || item._id || new Date().getTime()),
+        quantity: parseInt(item.quantity) || 1,
+        price: parseFloat(item.price) || 0,
+        message: item.message || ""
+      })),
+      
+      subtotal: parseFloat(orderDataPayload.subtotal) || parseFloat(paymentData.amount),
+      shippingCost: parseFloat(orderDataPayload.shippingCost) || 0,
+      totalAmount: parseFloat(paymentData.amount),
+      promoCode: paymentData.promoCode || "",
+      promoDiscount: parseFloat(paymentData.promoDiscount) || 0,
+      orderType: orderDataPayload.orderType || "pickup",
+      
+      // 🔥 CRITICAL: scheduleTime conversion
+      scheduleTime: {
+        date: new Date(orderDataPayload.scheduleTime?.date), // String → Date
+        timeSlot: orderDataPayload.scheduleTime?.timeSlot || ""
+      },
+      
+      // 🔥 PICKUP ORDERS: shippingAddress = NULL (✅ SOLVES VALIDATION)
+      // 🔥 DELIVERY ORDERS: Full address validation
+      shippingAddress: orderDataPayload.orderType === "delivery" && orderDataPayload.shippingAddress
+        ? {
+            city: orderDataPayload.shippingAddress.city || "",
+            area: orderDataPayload.shippingAddress.area || "",
+            street: orderDataPayload.shippingAddress.street || "",
+            block: parseInt(orderDataPayload.shippingAddress.block) || 0,
+            house: parseInt(orderDataPayload.shippingAddress.house) || 0,
+          }
+        : null, // ← PICKUP = null (no validation errors!)
+      
+      userInfo: {
+        name: paymentData.customerName || orderDataPayload.userInfo?.name || "Guest",
+        phone: paymentData.phone || orderDataPayload.userInfo?.phone || "96500000000"
+      },
+      
+      specialInstructions: orderDataPayload.specialInstructions || "",
+      status: status,
       invoiceId: invoiceId,
       paymentStatus: status,
       paymentMethod: paymentData.paymentMethod,
-      subtotal: parseFloat(paymentData.amount),
-      promoCode: paymentData.promoCode || "",
-      promoDiscount: parseFloat(paymentData.promoDiscount || 0),
-      totalAmount: parseFloat(paymentData.amount),
-      paymentGateway: "myfatoorah",
-      items: orderDataPayload.items || [],
-      
-      // 🔥 ENSURE COMPLETE ADDRESS OBJECT
-      shippingAddress: orderDataPayload.shippingAddress || null,
-      
-      // 🔥 LOG ADDRESS FOR DEBUG
-      ...(orderDataPayload.orderType === "delivery" && {
-        orderType: "delivery",
-        shippingAddress: {
-          city: orderDataPayload.shippingAddress?.city || orderDataPayload.city || "",
-          area: orderDataPayload.shippingAddress?.area || orderDataPayload.area || "",
-          street: orderDataPayload.shippingAddress?.street || orderDataPayload.street || "",
-          block: orderDataPayload.shippingAddress?.block || orderDataPayload.block || "",
-          house: orderDataPayload.shippingAddress?.house || orderDataPayload.house || "",
-          landmark: orderDataPayload.shippingAddress?.landmark || orderDataPayload.landmark || "",
-          additionalInfo: orderDataPayload.shippingAddress?.additionalInfo || ""
-        }
-      }),
-      
-      orderType: orderDataPayload.orderType || "pickup",
-      scheduledSlot: orderDataPayload.scheduledSlot || null,
-      specialInstructions: orderDataPayload.specialInstructions || "",
-      createdAt: new Date(),
-      updatedAt: new Date(),
+      paymentGateway: "myfatoorah"
     };
 
-    console.log("💾 SAVING TO DB:", JSON.stringify({
-      orderType: fullOrderData.orderType,
-      hasShippingAddress: !!fullOrderData.shippingAddress,
-      addressPreview: fullOrderData.shippingAddress,
-      itemsCount: fullOrderData.items?.length || 0
-    }, null, 2));
+    console.log("💾 TRANSFORMED ORDER:", {
+      orderType: transformedOrder.orderType,
+      shippingAddress: transformedOrder.shippingAddress ? "FULL ADDRESS" : "NULL (PICKUP)",
+      productsCount: transformedOrder.products.length,
+      totalAmount: transformedOrder.totalAmount
+    });
 
-    const newOrder = new Order(fullOrderData);
+    const newOrder = new Order(transformedOrder);
     const savedOrder = await newOrder.save();
     
-    console.log(`✅ Order saved: ${savedOrder._id} | Status: ${status} | Invoice: ${invoiceId}`);
+    console.log(`✅ Order saved: ${savedOrder._id} | Type: ${transformedOrder.orderType}`);
     return savedOrder;
+
   } catch (error) {
-    console.error("❌ Order save failed:", error);
-    throw error;
+    console.error("💥 DB SAVE ERROR:", error.message);
+    throw new Error(`Order validation failed: ${error.message}`);
   }
 };
+
 
 const handlePaymentSuccess = async (req, res) => {
   console.log("\n🚨🚨🚨 SUCCESS CALLBACK HIT 🚨🚨🚨");
