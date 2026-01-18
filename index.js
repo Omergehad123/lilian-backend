@@ -5,7 +5,8 @@ const path = require("path");
 const fs = require("fs").promises;
 const cors = require("cors");
 const httpStatusText = require("./utils/httpStatusText");
-const verifyAdminToken = require("./App/middleware/verifyAdminToken"); // Adjust path
+const verifyAdminToken = require("./App/middleware/verifyAdminToken");
+
 const app = express();
 
 // Create uploads directory
@@ -22,12 +23,13 @@ ensureUploadDir();
 const PORT = process.env.PORT || 5000;
 const DB_URL = process.env.DB_URL;
 
+// MongoDB connection
 mongoose
   .connect(DB_URL)
   .then(() => console.log("✅ Connected to MongoDB"))
   .catch((err) => console.error("❌ MongoDB connection error:", err));
 
-// Middleware
+// CORS
 app.use(
   cors({
     origin: [
@@ -39,8 +41,17 @@ app.use(
   })
 );
 
+// IMPORTANT: Webhook must be raw to validate signature
+app.use(
+  "/api/payment/webhook",
+  express.raw({ type: "application/json" })
+);
+
+// Body parsers for other routes
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true }));
+
+// Static uploads
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 app.set("trust proxy", 1);
 
@@ -54,8 +65,9 @@ const usersRouter = require("./route/users.route");
 const orderRouter = require("./route/order.route");
 const cityAreaRoutes = require("./route/cityAreaRoutes");
 const promoRoute = require("./route/promos");
-const paymentRouter = require("./route/paymentRoutes")
-app.use("/api/admin", ClosedSchedul); // ✅ FIXED ROUTE MOUNTING
+const paymentRouter = require("./route/paymentRoutes");
+
+app.use("/api/admin", ClosedSchedul);
 app.use("/api/products", productsRouter);
 app.use("/api/users", usersRouter);
 app.use("/api/payment", paymentRouter);
@@ -63,7 +75,7 @@ app.use("/api/orders", orderRouter);
 app.use("/api/city-areas", cityAreaRoutes);
 app.use("/api/promos", promoRoute);
 
-// ✅ SCHEDULE ROUTES - PUBLIC READ, ADMIN WRITE
+// Schedule Routes
 app.get("/api/admin/is-today-closed", async (req, res) => {
   try {
     const ClosedSchedule = require("./App/models/ClosedSchedule");
@@ -92,7 +104,6 @@ app.post("/api/admin/open-today-schedule", async (req, res) => {
     const today = new Date();
     const todayString = today.toISOString().split("T")[0];
 
-    // Delete the closed record to OPEN it
     await ClosedSchedule.deleteOne({ date: todayString });
 
     res.json({
@@ -102,13 +113,10 @@ app.post("/api/admin/open-today-schedule", async (req, res) => {
     });
   } catch (error) {
     console.error("Open schedule error:", error);
-    res
-      .status(500)
-      .json({ success: false, message: "Failed to open schedule" });
+    res.status(500).json({ success: false, message: "Failed to open schedule" });
   }
 });
 
-// Import verifyAdminToken at bottom to avoid circular dependency
 app.post(
   "/api/admin/close-today-schedule",
   verifyAdminToken,

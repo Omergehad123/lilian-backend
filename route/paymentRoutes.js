@@ -4,7 +4,6 @@ const {
   createMyFatoorahPayment,
   handlePaymentSuccess,
   handleWebhook,
-  testPaymentEndpoint,
 } = require("../App/controllers/paymentController");
 
 console.log("✅ Payment routes loaded");
@@ -12,7 +11,6 @@ console.log("✅ Payment routes loaded");
 // NO AUTH - GUESTS CAN PAY
 router.post("/myfatoorah", createMyFatoorahPayment);
 router.get("/success", handlePaymentSuccess);
-router.post("/webhook", handleWebhook);        // ✅ MyFatoorah calls this
-router.post("/test", testPaymentEndpoint);
+router.post("/webhook", handleWebhook); // MyFatoorah webhook
 
 module.exports = router;
