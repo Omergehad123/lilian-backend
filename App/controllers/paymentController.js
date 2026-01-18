@@ -1,10 +1,18 @@
 const axios = require("axios");
 const Order = require("../models/order-model");
 
-// 🔥 BULLETPROOF URL HELPER - FIXES DOUBLE SLASH
-const getCleanUrl = (path) => {
-  const base = (process.env.FRONTEND_URL || "https://lilyandelarosekw.com").replace(/\/+$/, '');
-  return `${base}${path.startsWith('/') ? path : '/' + path}`;
+// 🔥 DEBUG VERSION - TRACKS EVERY URL
+const getCleanUrl = (path, debugLocation) => {
+  const rawEnv = process.env.FRONTEND_URL || "https://lilyandelarosekw.com";
+  console.log(`🔍 [${debugLocation}] RAW ENV: "${rawEnv}" | LENGTH: ${rawEnv.length}`);
+  
+  const base = rawEnv.replace(/\/+$/, '');
+  console.log(`🔍 [${debugLocation}] CLEAN BASE: "${base}"`);
+  
+  const fullUrl = `${base}${path.startsWith('/') ? path : '/' + path}`;
+  console.log(`🔍 [${debugLocation}] FINAL URL: "${fullUrl}"`);
+  
+  return fullUrl;
 };
 
 const createMyFatoorahPayment = async (req, res) => {
@@ -32,16 +40,19 @@ const createMyFatoorahPayment = async (req, res) => {
       return res.status(400).json({ isSuccess: false, message: "Minimum amount is 0.100 KWD" });
     }
 
-    // API KEY CHECK
     if (!process.env.MYFATOORAH_API_KEY) {
       return res.status(500).json({ isSuccess: false, message: "Payment gateway not configured" });
     }
 
-    // PAYMENT METHOD ID
     const paymentMethodId = paymentMethod === "knet" ? 1 : 2;
     console.log(`🎯 PaymentMethodId: ${paymentMethodId}`);
 
-    // 🔥 MYFATOORAH DIRECT EXECUTE PAYMENT - BULLETPROOF URLS
+    // 🔥 DEBUG: URL GENERATION
+    console.log("\n🔥🔥🔥 URL DEBUG START 🔥🔥🔥");
+    const callbackUrl = getCleanUrl("/payment-success", "CREATE_PAYMENT_CALLBACK");
+    const errorUrl = getCleanUrl("/payment-failed", "CREATE_PAYMENT_ERROR");
+    console.log("🔥🔥🔥 URL DEBUG END 🔥🔥🔥\n");
+
     const response = await axios.post(
       `${process.env.MYFATOORAH_BASE_URL || "https://api.myfatoorah.com"}/v2/ExecutePayment`,
       {
@@ -50,8 +61,8 @@ const createMyFatoorahPayment = async (req, res) => {
         CustomerName: customerName,
         CustomerEmail: customerEmail,
         CustomerMobile: phone,
-        CallBackUrl: getCleanUrl("/payment-success"),
-        ErrorUrl: getCleanUrl("/payment-failed"),
+        CallBackUrl: callbackUrl,
+        ErrorUrl: errorUrl,
         NotificationOption: "ALL",
         Lang: "en",
         DisplayCurrencyIso: "KWD",
@@ -71,6 +82,8 @@ const createMyFatoorahPayment = async (req, res) => {
     );
 
     console.log("✅ MyFatoorah Response:", response.data.IsSuccess, !!response.data.Data?.PaymentURL);
+    console.log("📄 MyFatoorah CALLBACK URL:", response.data.Data?.CallBackUrl);
+    console.log("📄 MyFatoorah ERROR URL:", response.data.Data?.ErrorUrl);
 
     if (!response.data.IsSuccess || !response.data.Data?.PaymentURL) {
       await saveOrderToDB(req.body, response.data.Data?.InvoiceId || null, "failed");
@@ -81,12 +94,10 @@ const createMyFatoorahPayment = async (req, res) => {
       });
     }
 
-    // ✅ Save PENDING order BEFORE redirecting to payment
     const invoiceId = response.data.Data.InvoiceId;
     await saveOrderToDB(req.body, invoiceId, "pending");
 
     console.log("🎉 PAYMENT URL:", response.data.Data.PaymentURL);
-    console.log("✅ CALLBACK URLS:", getCleanUrl("/payment-success"), getCleanUrl("/payment-failed"));
     
     res.json({
       isSuccess: true,
@@ -99,7 +110,6 @@ const createMyFatoorahPayment = async (req, res) => {
       status: error.response?.status,
       data: error.response?.data,
     });
-
     res.status(500).json({
       isSuccess: false,
       message: error.response?.data?.Message || error.message || "Payment gateway error",
@@ -107,7 +117,6 @@ const createMyFatoorahPayment = async (req, res) => {
   }
 };
 
-// ✅ Save order to database
 const saveOrderToDB = async (paymentData, invoiceId, status = "pending") => {
   try {
     const orderData = {
@@ -144,20 +153,26 @@ const saveOrderToDB = async (paymentData, invoiceId, status = "pending") => {
   }
 };
 
-// ✅ FIXED: Handle payment success callback
+// 🔥 DEBUG VERSION - TRACKING REDIRECTS
 const handlePaymentSuccess = async (req, res) => {
-  console.log("📥 SUCCESS CALLBACK:", req.query);
+  console.log("\n🚨🚨🚨 SUCCESS CALLBACK HIT 🚨🚨🚨");
+  console.log("📥 FULL QUERY:", JSON.stringify(req.query, null, 2));
+  
   const { paymentId, invoiceId } = req.query;
   const id = paymentId || invoiceId;
-
-  console.log("🔗 Clean URLs:", getCleanUrl("/payment-success"), getCleanUrl("/payment-failed"));
+  
+  console.log("🎯 RAW ENV:", `"${process.env.FRONTEND_URL}"`);
+  console.log("🎯 URL DEBUG START");
+  const successUrl = getCleanUrl("/payment-success", "SUCCESS_HANDLER");
+  const failedUrl = getCleanUrl("/payment-failed", "SUCCESS_HANDLER");
+  console.log("🎯 URL DEBUG END");
 
   if (!id) {
     console.log("❌ No paymentId/invoiceId - redirecting to failed");
-    return res.redirect(getCleanUrl("/payment-failed"));
+    console.log("🔗 REDIRECTING TO:", failedUrl);
+    return res.redirect(failedUrl);
   }
 
-  // ✅ Update order to PAID status
   if (invoiceId) {
     try {
       await Order.findOneAndUpdate(
@@ -174,11 +189,13 @@ const handlePaymentSuccess = async (req, res) => {
     }
   }
 
-  console.log("✅ Redirecting to success:", getCleanUrl("/payment-success") + `?paymentId=${id}`);
-  res.redirect(getCleanUrl("/payment-success") + `?paymentId=${id}`);
+  const finalRedirect = successUrl + `?paymentId=${id}`;
+  console.log("🚀 FINAL REDIRECT:", finalRedirect);
+  console.log("🚨🚨🚨 SUCCESS CALLBACK END 🚨🚨🚨\n");
+  
+  res.redirect(finalRedirect);
 };
 
-// ✅ Complete Webhook Handler
 const handleWebhook = async (req, res) => {
   try {
     let webhookData;
@@ -251,9 +268,13 @@ const handleWebhook = async (req, res) => {
 const testPaymentEndpoint = (req, res) => {
   console.log("✅ TEST ENDPOINT REACHED - NO AUTH!");
   console.log("📥 PAYLOAD:", req.body);
+  console.log("🔍 ENV FRONTEND_URL:", `"${process.env.FRONTEND_URL}"`);
+  console.log("🔍 getCleanUrl TEST:", getCleanUrl("/test", "TEST_ENDPOINT"));
   res.json({
     isSuccess: true,
     message: "Controller working!",
+    envUrl: process.env.FRONTEND_URL,
+    cleanUrl: getCleanUrl("/test", "TEST"),
     received: req.body,
   });
 };
