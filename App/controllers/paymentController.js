@@ -2,6 +2,13 @@ const axios = require("axios");
 const mongoose = require("mongoose");
 const Order = require("../models/order-model");
 
+// 🔥 BULLETPROOF URL CLEANER
+const cleanUrl = (baseUrl, path) => {
+  let cleanBase = baseUrl.endsWith('/') ? baseUrl.slice(0, -1) : baseUrl;
+  let cleanPath = path.replace(/^\/+/, '/'); // Remove multiple leading slashes
+  return `${cleanBase}${cleanPath}`;
+};
+
 const createMyFatoorahPayment = async (req, res) => {
   try {
     console.log("🚀 === PAYMENT CONTROLLER REACHED ===");
@@ -32,19 +39,18 @@ const createMyFatoorahPayment = async (req, res) => {
       return res.status(500).json({ isSuccess: false, message: "Payment gateway not configured" });
     }
 
-    // ✅ FIXED: Clean URL construction
+    // 🔥 BULLETPROOF URL CLEANING
     const baseUrl = process.env.FRONTEND_URL || "https://lilyandelarosekw.com";
-    const cleanBaseUrl = baseUrl.endsWith('/') ? baseUrl.slice(0, -1) : baseUrl;
-    const successUrl = `${cleanBaseUrl}/payment-success`;
-    const errorUrl = `${cleanBaseUrl}/payment-failed`;
+    const successUrl = cleanUrl(baseUrl, "/payment-success");
+    const errorUrl = cleanUrl(baseUrl, "/payment-failed");
 
-    console.log(`🎯 Clean URLs: Success=${successUrl}, Error=${errorUrl}`);
+    console.log(`🎯 CLEAN URLs: Success=${successUrl} | Error=${errorUrl}`);
 
     // PAYMENT METHOD ID
     const paymentMethodId = paymentMethod === "knet" ? 1 : 2;
     console.log(`🎯 PaymentMethodId: ${paymentMethodId}`);
 
-    // ✅ EXTRACT FULL ORDER DATA for webhook
+    // EXTRACT FULL ORDER DATA for webhook
     const orderData = {
       products: req.body.products || [],
       orderType: req.body.orderType || "pickup",
@@ -65,7 +71,7 @@ const createMyFatoorahPayment = async (req, res) => {
       specialInstructions: req.body.specialInstructions || ""
     };
 
-    // 🔥 MYFATOORAH EXECUTE PAYMENT with CLEAN URLs
+    // MYFATOORAH EXECUTE PAYMENT with CLEAN URLs
     const response = await axios.post(
       `${process.env.MYFATOORAH_BASE_URL || "https://api.myfatoorah.com"}/v2/ExecutePayment`,
       {
@@ -74,8 +80,8 @@ const createMyFatoorahPayment = async (req, res) => {
         CustomerName: customerName,
         CustomerEmail: customerEmail,
         CustomerMobile: phone,
-        CallBackUrl: successUrl,        // ✅ CLEAN URL
-        ErrorUrl: errorUrl,            // ✅ CLEAN URL
+        CallBackUrl: successUrl,        // ✅ NO DOUBLE SLASH
+        ErrorUrl: errorUrl,            // ✅ NO DOUBLE SLASH
         NotificationOption: "ALL",
         Lang: "en",
         DisplayCurrencyIso: "KWD",
@@ -128,17 +134,17 @@ const handlePaymentSuccess = async (req, res) => {
   const { paymentId, invoiceId } = req.query;
   const id = paymentId || invoiceId;
 
+  const baseUrl = process.env.FRONTEND_URL || "https://lilyandelarosekw.com";
+  
   if (!id) {
-    // ✅ FIXED: Clean redirect URL
-    const baseUrl = process.env.FRONTEND_URL || "https://lilyandelarosekw.com";
-    const cleanBaseUrl = baseUrl.endsWith('/') ? baseUrl.slice(0, -1) : baseUrl;
-    return res.redirect(`${cleanBaseUrl}/payment-failed`);
+    const cleanRedirect = cleanUrl(baseUrl, "/payment-failed");
+    console.log("🔗 REDIRECTING TO FAILED:", cleanRedirect);
+    return res.redirect(cleanRedirect);
   }
   
-  // ✅ FIXED: Clean success redirect with paymentId
-  const baseUrl = process.env.FRONTEND_URL || "https://lilyandelarosekw.com";
-  const cleanBaseUrl = baseUrl.endsWith('/') ? baseUrl.slice(0, -1) : baseUrl;
-  res.redirect(`${cleanBaseUrl}/payment-success?paymentId=${id}`);
+  const successRedirect = `${cleanUrl(baseUrl, "/payment-success")}?paymentId=${id}`;
+  console.log("🔗 REDIRECTING TO SUCCESS:", successRedirect);
+  res.redirect(successRedirect);
 };
 
 const handleWebhook = async (req, res) => {
@@ -161,9 +167,12 @@ const handleWebhook = async (req, res) => {
       return res.status(400).json({ success: false, message: "Invalid webhook data" });
     }
 
-    // 🔥 FIXED: Add paymentId/invoiceId to existingOrder check
+    // Check duplicates by phone + amount (since model lacks paymentId field)
     const existingOrder = await Order.findOne({ 
-      $or: [{ paymentId: PaymentId }, { invoiceId: InvoiceId }] 
+      $and: [
+        { "userInfo.phone": orderData.userInfo?.phone },
+        { totalAmount: orderData.totalAmount }
+      ]
     });
     
     if (existingOrder) {
@@ -171,18 +180,17 @@ const handleWebhook = async (req, res) => {
       return res.status(200).json({ success: true });
     }
 
-    // ✅ SAFE ObjectId conversion with error handling
+    // SAFE ObjectId conversion
     let userObjectId;
     try {
       userObjectId = new mongoose.Types.ObjectId(userId);
     } catch (error) {
-      console.log("❌ Invalid userId format:", userId);
-      return res.status(400).json({ success: false, message: "Invalid user ID" });
+      console.log("⚠️ Invalid userId, skipping user field:", userId);
     }
 
-    // CREATE ORDER
+    // CREATE ORDER (matches your schema exactly)
     const newOrder = new Order({
-      user: userObjectId,
+      ...(userObjectId && { user: userObjectId }),
       products: orderData.products || [],
       totalAmount: orderData.totalAmount,
       orderType: orderData.orderType,
@@ -194,10 +202,7 @@ const handleWebhook = async (req, res) => {
       promoDiscount: orderData.promoDiscount || 0,
       subtotal: orderData.subtotal || orderData.totalAmount,
       shippingCost: orderData.shippingCost || 0,
-      specialInstructions: orderData.specialInstructions || "",
-      // 🔥 ADD PAYMENT TRACKING FIELDS
-      paymentId: PaymentId,
-      invoiceId: InvoiceId
+      specialInstructions: orderData.specialInstructions || ""
     });
 
     await newOrder.save();
@@ -206,7 +211,7 @@ const handleWebhook = async (req, res) => {
     res.status(200).json({ success: true });
   } catch (error) {
     console.error("💥 WEBHOOK ERROR:", error);
-    res.status(500).json({ success: false, error: error.message });
+    res.status(500).json({ success: false });
   }
 };
 
