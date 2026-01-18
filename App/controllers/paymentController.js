@@ -35,7 +35,7 @@ const createMyFatoorahPayment = async (req, res) => {
     const paymentMethodId = paymentMethod === "knet" ? 1 : 2;
     console.log(`🎯 PaymentMethodId: ${paymentMethodId}`);
 
-    // 🔥 MYFATOORAH DIRECT EXECUTE PAYMENT
+    // 🔥 MYFATOORAH DIRECT EXECUTE PAYMENT - FIXED URLS
     const response = await axios.post(
       `${process.env.MYFATOORAH_BASE_URL || "https://api.myfatoorah.com"}/v2/ExecutePayment`,
       {
@@ -44,8 +44,8 @@ const createMyFatoorahPayment = async (req, res) => {
         CustomerName: customerName,
         CustomerEmail: customerEmail,
         CustomerMobile: phone,
-        CallBackUrl: `${(process.env.FRONTEND_URL || "https://lilyandelarosekw.com").replace(/\/$/, '')}/payment-success`,
-        ErrorUrl: `${(process.env.FRONTEND_URL || "https://lilyandelarosekw.com").replace(/\/$/, '')}/payment-failed`,
+        CallBackUrl: `${process.env.FRONTEND_URL || "https://lilyandelarosekw.com"}/payment-success`,
+        ErrorUrl: `${process.env.FRONTEND_URL || "https://lilyandelarosekw.com"}/payment-failed`,
         NotificationOption: "ALL",
         Lang: "en",
         DisplayCurrencyIso: "KWD",
@@ -137,14 +137,14 @@ const saveOrderToDB = async (paymentData, invoiceId, status = "pending") => {
   }
 };
 
-// ✅ UPDATED: Handle payment success callback
+// ✅ FIXED: Handle payment success callback
 const handlePaymentSuccess = async (req, res) => {
   console.log("📥 SUCCESS CALLBACK:", req.query);
   const { paymentId, invoiceId } = req.query;
   const id = paymentId || invoiceId;
 
   if (!id) {
-    return res.redirect(`${process.env.FRONTEND_URL || "https://lilyandelarosekw.com"}payment-failed`);
+    return res.redirect(`${process.env.FRONTEND_URL || "https://lilyandelarosekw.com"}/payment-failed`);
   }
 
   // ✅ Update order to PAID status
@@ -165,12 +165,11 @@ const handlePaymentSuccess = async (req, res) => {
   }
 
   res.redirect(
-    `${process.env.FRONTEND_URL || "https://lilyandelarosekw.com"}payment-success?paymentId=${id}`
+    `${process.env.FRONTEND_URL || "https://lilyandelarosekw.com"}/payment-success?paymentId=${id}`
   );
 };
 
-// ✅ FIXED: Complete Webhook Handler (MOST IMPORTANT!)
-// ✅ REPLACE your handleWebhook function with this COMPLETE version:
+// ✅ FIXED: Complete Webhook Handler
 const handleWebhook = async (req, res) => {
   try {
     // ✅ Parse raw JSON body
@@ -244,7 +243,6 @@ const handleWebhook = async (req, res) => {
   }
 };
 
-
 const testPaymentEndpoint = (req, res) => {
   console.log("✅ TEST ENDPOINT REACHED - NO AUTH!");
   console.log("📥 PAYLOAD:", req.body);
@@ -254,7 +252,6 @@ const testPaymentEndpoint = (req, res) => {
     received: req.body,
   });
 };
-
 
 module.exports = {
   createMyFatoorahPayment,
