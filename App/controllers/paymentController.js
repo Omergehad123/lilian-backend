@@ -279,10 +279,28 @@ const testPaymentEndpoint = (req, res) => {
   });
 };
 
+// 🔥 RENDER DEBUG ENDPOINT - ADD TO CONTROLLER (NOT ROUTES)
+const debugUrlsEndpoint = (req, res) => {
+  console.log("🔍 DEBUG URLS HIT - ENV:", `"${process.env.FRONTEND_URL}"`);
+  const testCallback = getCleanUrl("/payment-success", "DEBUG_ENDPOINT");
+  const testError = getCleanUrl("/payment-failed", "DEBUG_ENDPOINT");
+  
+  res.json({
+    envRaw: process.env.FRONTEND_URL,
+    envLength: process.env.FRONTEND_URL?.length,
+    hasTrailingSlash: process.env.FRONTEND_URL?.endsWith('/'),
+    callbackUrl: testCallback,
+    errorUrl: testError,
+    timestamp: new Date().toISOString()
+  });
+};
+
+
 module.exports = {
   createMyFatoorahPayment,
   handlePaymentSuccess,
   handleWebhook,
   testPaymentEndpoint,
   saveOrderToDB,
+  debugUrlsEndpoint
 };

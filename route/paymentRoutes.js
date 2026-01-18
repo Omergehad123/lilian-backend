@@ -5,8 +5,10 @@ const {
   handlePaymentSuccess,
   handleWebhook,
   testPaymentEndpoint,
+  debugUrlsEndpoint
 } = require("../App/controllers/paymentController");
 
+router.get("/debug-urls", debugUrlsEndpoint); 
 console.log("✅ Payment routes loaded");
 
 // ✅ NO AUTH REQUIRED for payment - GUESTS CAN PAY
@@ -17,5 +19,7 @@ router.get("/success", handlePaymentSuccess);
 router.post("/webhook", express.raw({ type: 'application/json' }), handleWebhook);
 
 router.post("/test", testPaymentEndpoint);
+
+
 
 module.exports = router;
