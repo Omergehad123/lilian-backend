@@ -46,8 +46,8 @@ const orderSchema = new mongoose.Schema(
       timeSlot: {
         type: String,
         enum: [
-          "08:00 AM - 01:00 PM",
-          "01:00 PM - 06:00 PM",
+          "10:00 AM - 02:00 PM",
+          "02:00 PM - 06:00 PM",
           "06:00 PM - 11:00 PM",
         ],
         required: true,
