@@ -5,21 +5,14 @@ const {
   handlePaymentSuccess,
   handleWebhook,
   testPaymentEndpoint,
-  debugUrlsEndpoint
 } = require("../App/controllers/paymentController");
 
-router.get("/debug-urls", debugUrlsEndpoint); 
 console.log("✅ Payment routes loaded");
 
 // ✅ NO AUTH REQUIRED for payment - GUESTS CAN PAY
 router.post("/myfatoorah", createMyFatoorahPayment);
-router.get("/success", handlePaymentSuccess); 
-
-// 🔥 CRITICAL: Raw body parser for MyFatoorah webhook signature verification
-router.post("/webhook", express.raw({ type: 'application/json' }), handleWebhook);
-
-router.post("/test", testPaymentEndpoint);
-
-
+router.get("/success", handlePaymentSuccess); // ✅ GET not POST for callback
+router.post("/webhook", handleWebhook);
+router.post("/test", testPaymentEndpoint); // ← ADD THIS LINE
 
 module.exports = router;
