@@ -7,13 +7,6 @@ const bcrypt = require("bcryptjs");
 const generateJWT = require("../../utils/generateJWT");
 const userRoles = require("../../utils/roles");
 
-const cookieOptions = {
-  httpOnly: true,
-  secure: process.env.NODE_ENV === "production",
-  sameSite: "strict",
-  maxAge: 1000 * 60 * 60 * 24 * 7, // 7 days
-};
-
 const getAllUser = asyncWrapper(async (req, res, next) => {
   const users = await User.find().select("-password -cart -token");
 
@@ -55,9 +48,6 @@ const register = asyncWrapper(async (req, res, next) => {
 
   await newUser.save();
 
-  // Save token in cookie
-  res.cookie("token", token, cookieOptions);
-
   const { password: pwd, ...userWithoutPass } = newUser.toObject();
   const userWithToken = { ...userWithoutPass, token };
 
@@ -86,11 +76,8 @@ const login = asyncWrapper(async (req, res, next) => {
     role: user.role,
   });
 
-  // Save token in cookie
-  res.cookie("token", token, cookieOptions);
-
-  const { password: pwd, ...userWithoutPass } = user.toObject();
-  const userWithToken = { ...userWithoutPass, token };
+  const { password: pwd, ...userWithoutPass } = user.toObject(); // remove password
+  const userWithToken = { ...userWithoutPass, token }; // attach token inside user object
 
   res.json({
     status: httpStatusText.SUCCESS,
@@ -207,22 +194,10 @@ const loginAsGuest = asyncWrapper(async (req, res, next) => {
   // Check if guest email already exists
   let existingGuest = await User.findOne({ email: guestEmail });
   if (existingGuest) {
-    const token = await generateJWT({
-      id: existingGuest._id,
-      email: existingGuest.email,
-      role: existingGuest.role,
-      isGuest: true,
-    });
-
-    // Save token in cookie
-    res.cookie("token", token, cookieOptions);
-
     const { password, ...userWithoutPass } = existingGuest.toObject();
-    const userWithToken = { ...userWithoutPass, token };
-
     return res.json({
       status: httpStatusText.SUCCESS,
-      data: { user: userWithToken },
+      data: { user: userWithoutPass },
     });
   }
 
@@ -246,9 +221,6 @@ const loginAsGuest = asyncWrapper(async (req, res, next) => {
 
   await newGuest.save();
 
-  // Save token in cookie
-  res.cookie("token", token, cookieOptions);
-
   const { password: pwd, ...userWithoutPass } = newGuest.toObject();
   const userWithToken = { ...userWithoutPass, token };
 
@@ -259,10 +231,14 @@ const loginAsGuest = asyncWrapper(async (req, res, next) => {
   });
 });
 
-const getMe = asyncWrapper(async (req, res, next) => {
-  const user = await User.findById(req.user._id).select("-password");
-  res.json({ user });
-});
+const getMe = async (req, res) => {
+  try {
+    const user = await User.findById(req.user._id).select("-password");
+    res.json({ user });
+  } catch (err) {
+    res.status(500).json({ message: "Server error" });
+  }
+};
 
 module.exports = {
   getAllUser,
