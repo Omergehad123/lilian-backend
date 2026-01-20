@@ -16,13 +16,13 @@ const userRoles = require("../utils/roles");
 // ✅ GUESTS CAN CREATE ORDERS (No auth required for creation)
 router.post("/", createOrder);
 
+// ADMIN ROUTES (MUST be before /:id)
+router.get("/admin/all", verifyAdminToken, allowTo(userRoles.ADMIN, userRoles.MANAGER), getAllOrders);
+router.patch("/:id/status", verifyAdminToken, allowTo(userRoles.ADMIN, userRoles.MANAGER), updateOrderStatus);
+
 // AUTH REQUIRED for user orders
 router.get("/", verifyCookieToken, getOrders);
 router.get("/:id", verifyCookieToken, getOrder);
 router.delete("/:id", verifyCookieToken, deleteOrder);
-
-// ADMIN ROUTES
-router.get("/admin/all", verifyAdminToken, allowTo(userRoles.ADMIN, userRoles.MANAGER), getAllOrders);
-router.patch("/:id/status", verifyAdminToken, allowTo(userRoles.ADMIN, userRoles.MANAGER), updateOrderStatus);
 
 module.exports = router;

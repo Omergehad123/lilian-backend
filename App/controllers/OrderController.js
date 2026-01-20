@@ -1,4 +1,3 @@
-// controllers/orderController.js - FULL ORDER CONTROLLER WITH SHIPPING COST
 const Order = require("../models/order-model");
 const User = require("../models/users.model");
 const Promo = require("../models/Promo");
@@ -8,63 +7,67 @@ const AppError = require("../../utils/appError");
 const httpStatusText = require("../../utils/httpStatusText");
 
 const createOrder = asyncWrapper(async (req, res, next) => {
-  const session = await mongoose.startSession();
-  session.startTransaction();
+  const {
+    products,
+    subtotal,
+    shippingCost,
+    totalAmount,
+    orderType,
+    scheduleTime,
+    shippingAddress,
+    userInfo,
+    paymentMethod,
+  } = req.body;
 
-  try {
-    // 🔥 SUPPORT GUEST USERS
-    const userId = req.user?._id || new mongoose.Types.ObjectId();
+  if (!products?.length) {
+    return next(new AppError("No products provided", 400));
+  }
 
-    const {
-      products, subtotal, shippingCost, promoDiscount, totalAmount,
-      orderType, scheduleTime, shippingAddress, userInfo, promoCode,
-      specialInstructions, paymentMethod
-    } = req.body;
+  if (subtotal === undefined || totalAmount === undefined) {
+    return next(new AppError("Subtotal and totalAmount are required", 400));
+  }
 
-    // Validation (keep existing validation code...)
-    if (!products || !products.length) {
-      throw new AppError("No products provided", 400);
+  const isGuest = !req.user;
+
+  const orderData = {
+    products,
+    subtotal,
+    shippingCost: shippingCost || 0,
+    totalAmount,
+    orderType,
+    scheduleTime,
+    shippingAddress,
+    paymentMethod,
+    status: "pending",
+    isPaid: false,
+  };
+
+  if (isGuest) {
+    // Validate guest info
+    if (!userInfo?.name || !userInfo?.phone) {
+      return next(new AppError("Guest info is required", 400));
     }
 
-    // Create order with payment tracking
-    const order = await Order.create([{
-      user: userId,
-      products,
-      subtotal,
-      shippingCost: shippingCost || 0,
-      promoCode: promoCode || null,
-      promoDiscount: promoDiscount || 0,
-      totalAmount,
-      orderType,
-      scheduleTime,
-      shippingAddress,
-      userInfo,
-      specialInstructions: specialInstructions || null,
-      status: "pending",           // Initial status
-      isPaid: false,               // Payment pending
-      paymentMethod: paymentMethod || null,
-    }], { session });
-
-    const createdOrder = order[0];
-
-    await session.commitTransaction();
-
-    // Populate order details
-    const populatedOrder = await Order.findById(createdOrder._id)
-      .populate("products.product")
-      .populate("user", "firstName lastName email");
-
-    res.status(201).json({
-      success: true,
-      orderId: createdOrder._id.toString(),  // ✅ Frontend needs this
-      data: populatedOrder,
-    });
-  } catch (error) {
-    await session.abortTransaction();
-    next(error);
-  } finally {
-    session.endSession();
+    orderData.isGuest = true;
+    orderData.guestInfo = {
+      name: userInfo.name,
+      phone: userInfo.phone,
+    };
+  } else {
+    orderData.user = req.user._id;
   }
+
+  const order = await Order.create(orderData);
+
+  const populatedOrder = await Order.findById(order._id)
+    .populate("products.product")
+    .populate("user", "firstName lastName email");
+
+  res.status(201).json({
+    success: true,
+    orderId: order._id,
+    data: populatedOrder,
+  });
 });
 
 

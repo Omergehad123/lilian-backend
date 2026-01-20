@@ -5,7 +5,7 @@ const asyncWrapper = require("./asyncWrapper");
 
 const verifyCookieToken = asyncWrapper(async (req, res, next) => {
   // ✅ READ FROM COOKIE (not header)
-  const token = req.cookies.token;
+  const token = req.cookies?.token; // ✅ SAFE CHECK
 
   if (!token) {
     return next(new AppError("No token provided. Please login first.", 401));
@@ -16,7 +16,8 @@ const verifyCookieToken = asyncWrapper(async (req, res, next) => {
     const decoded = jwt.verify(token, process.env.JWT_SECRET_KEY);
 
     // ✅ Get user from DB
-    const user = await User.findById(decoded.id).select("-password");
+    const userId = decoded.id || decoded._id; // ✅ FIXED
+    const user = await User.findById(userId).select("-password");
 
     if (!user) {
       return next(new AppError("User not found", 401));

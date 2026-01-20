@@ -2,13 +2,14 @@ const express = require("express");
 const router = express.Router();
 const userController = require("../App/controllers/usersController");
 const verifyToken = require("../App/middleware/verifyToken");
+const verifyCookieToken = require("../App/middleware/verifyCookieToken"); // ✅ NEW
 const verifyAdminToken = require("../App/middleware/verifyAdminToken"); // ✅ NEW
 const allowTo = require("../App/middleware/allowTo");
 const userRoles = require("../utils/roles");
 
 router.post("/guest-login", userController.loginAsGuest);
 
-router.get("/", verifyToken, userController.getAllUser);
+router.get("/", verifyCookieToken, userController.getAllUser); // ✅ FIXED
 
 router.get(
   "/admin",
@@ -30,14 +31,14 @@ router.post("/logout", (req, res) => {
   res.json({ message: "Logged out successfully" });
 });
 
-router.post("/cart", verifyToken, userController.addToCart);
+router.post("/cart", verifyCookieToken, userController.addToCart); // ✅ FIXED
 
-router.get("/cart", verifyToken, userController.getCart);
+router.get("/cart", verifyCookieToken, userController.getCart); // ✅ FIXED
 
-router.delete("/cart/:productId", verifyToken, userController.removeFromCart);
+router.delete("/cart/:productId", verifyCookieToken, userController.removeFromCart); // ✅ FIXED
 
-router.patch("/cart/:productId", verifyToken, userController.updateCartItem);
+router.patch("/cart/:productId", verifyCookieToken, userController.updateCartItem); // ✅ FIXED
 
-router.get("/me", verifyToken, userController.getMe);
+router.get("/me", verifyCookieToken, userController.getMe); // ✅ FIXED
 
 module.exports = router;
