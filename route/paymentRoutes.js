@@ -4,7 +4,7 @@ const {
   createMyFatoorahPayment,
   handlePaymentSuccess,
   handleWebhook,
-  testPaymentEndpoint,
+
 } = require("../App/controllers/paymentController");
 
 console.log("✅ Payment routes loaded");
@@ -13,6 +13,4 @@ console.log("✅ Payment routes loaded");
 router.post("/myfatoorah", createMyFatoorahPayment);
 router.get("/success", handlePaymentSuccess); // ✅ GET not POST for callback
 router.post("/webhook", handleWebhook);
-router.post("/test", testPaymentEndpoint); // ← ADD THIS LINE
-
 module.exports = router;
