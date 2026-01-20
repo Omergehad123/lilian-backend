@@ -4,23 +4,23 @@ const Order = require("../models/order-model");
 // Mapper function to convert MyFatoorah PaymentMethod to enum values
 const mapPaymentMethod = (paymentMethod) => {
   if (!paymentMethod) return "other";
-  
+
   const methodLower = paymentMethod.toLowerCase();
-  
+
   // Map KNET variations
   if (methodLower.includes("knet")) {
     return "knet";
   }
-  
+
   // Map card variations (VISA/MASTER, VISA, MASTER, CARD, etc.)
-  if (methodLower.includes("visa") || 
-      methodLower.includes("master") || 
-      methodLower.includes("card") ||
-      methodLower.includes("credit") ||
-      methodLower.includes("debit")) {
+  if (methodLower.includes("visa") ||
+    methodLower.includes("master") ||
+    methodLower.includes("card") ||
+    methodLower.includes("credit") ||
+    methodLower.includes("debit")) {
     return "card";
   }
-  
+
   // Default to other for unknown payment methods
   return "other";
 };
@@ -72,8 +72,7 @@ const createMyFatoorahPayment = async (req, res) => {
 
     // 🔥 MYFATOORAH DIRECT EXECUTE PAYMENT
     const response = await axios.post(
-      `${
-        process.env.MYFATOORAH_BASE_URL || "https://api.myfatoorah.com"
+      `${process.env.MYFATOORAH_BASE_URL || "https://api.myfatoorah.com"
       }/v2/ExecutePayment`,
       {
         PaymentMethodId: paymentMethodId,
@@ -81,12 +80,10 @@ const createMyFatoorahPayment = async (req, res) => {
         CustomerName: customerName,
         CustomerEmail: customerEmail,
         CustomerMobile: phone,
-        CallBackUrl: `${
-          process.env.FRONTEND_URL || "https://lilyandelarosekw.com"
-        }/payment-success`,
-        ErrorUrl: `${
-          process.env.FRONTEND_URL || "https://lilyandelarosekw.com"
-        }/payment-failed`,
+        CallBackUrl: `${process.env.FRONTEND_URL || "https://lilyandelarosekw.com"
+          }payment-success`,
+        ErrorUrl: `${process.env.FRONTEND_URL || "https://lilyandelarosekw.com"
+          }payment-failed`,
         NotificationOption: "ALL",
         Lang: "en",
         DisplayCurrencyIso: "KWD",
@@ -167,15 +164,13 @@ const handlePaymentSuccess = async (req, res) => {
 
   if (!id) {
     return res.redirect(
-      `${
-        process.env.FRONTEND_URL || "https://lilyandelarosekw.com"
-      }/payment-failed`
+      `${process.env.FRONTEND_URL || "https://lilyandelarosekw.com"
+      }payment-failed`
     );
   }
   res.redirect(
-    `${
-      process.env.FRONTEND_URL || "https://lilyandelarosekw.com"
-    }/payment-success?paymentId=${id}`
+    `${process.env.FRONTEND_URL || "https://lilyandelarosekw.com"
+    }payment-success?paymentId=${id}`
   );
 };
 
@@ -183,7 +178,7 @@ const handleWebhook = async (req, res) => {
   try {
     console.log("=".repeat(60));
     console.log("🔔 WEBHOOK V1 RECEIVED AT:", new Date().toISOString());
-    
+
     // MyFatoorah V1 sends webhook as raw JSON string or Buffer
     let webhookData;
     try {
@@ -196,8 +191,8 @@ const handleWebhook = async (req, res) => {
       }
     } catch (parseError) {
       console.error("❌ Failed to parse webhook body:", parseError);
-      return res.status(200).json({ 
-        success: false, 
+      return res.status(200).json({
+        success: false,
         error: "Invalid JSON format"
       });
     }
@@ -207,7 +202,7 @@ const handleWebhook = async (req, res) => {
     // MyFatoorah V1 Webhook Structure: The payload is the Data object
     // Extract data - webhook payload is the Data object directly
     const paymentData = webhookData.Data || webhookData.data || webhookData;
-    
+
     // Extract invoice and payment information from V1 format
     const invoiceId = paymentData.InvoiceId || paymentData.invoiceId;
     const paymentId = paymentData.PaymentId || paymentData.paymentId;
@@ -218,12 +213,12 @@ const handleWebhook = async (req, res) => {
     // Extract orderId from UserDefinedField if available
     let userDefinedField = paymentData.UserDefinedField || paymentData.userDefinedField;
     let orderIdFromField = null;
-    
+
     if (userDefinedField) {
       try {
         // UserDefinedField might be a JSON string or already an object
-        const parsedField = typeof userDefinedField === "string" 
-          ? JSON.parse(userDefinedField) 
+        const parsedField = typeof userDefinedField === "string"
+          ? JSON.parse(userDefinedField)
           : userDefinedField;
         orderIdFromField = parsedField.orderId || parsedField.OrderId;
       } catch (e) {
@@ -242,8 +237,8 @@ const handleWebhook = async (req, res) => {
 
     if (!invoiceId) {
       console.warn("⚠️ Webhook missing InvoiceId - Full payload:", webhookData);
-      return res.status(200).json({ 
-        success: true, 
+      return res.status(200).json({
+        success: true,
         message: "No InvoiceId provided",
         received: webhookData
       });
@@ -320,8 +315,8 @@ const handleWebhook = async (req, res) => {
     console.log("=".repeat(60));
 
     // Always return 200 to acknowledge webhook receipt (required by MyFatoorah)
-    res.status(200).json({ 
-      success: true, 
+    res.status(200).json({
+      success: true,
       processed: !!order,
       invoiceId: invoiceIdStr,
       transactionStatus,
@@ -331,10 +326,10 @@ const handleWebhook = async (req, res) => {
     console.error("💥 WEBHOOK ERROR:", error.message);
     console.error("💥 Stack:", error.stack);
     console.log("=".repeat(60));
-    
+
     // Still return 200 to prevent MyFatoorah from retrying
-    res.status(200).json({ 
-      success: false, 
+    res.status(200).json({
+      success: false,
       error: error.message,
       timestamp: new Date().toISOString()
     });

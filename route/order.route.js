@@ -9,27 +9,20 @@ const {
   deleteOrder,
 } = require("../App/controllers/OrderController");
 const verifyCookieToken = require("../App/middleware/verifyCookieToken");
+const verifyAdminToken = require("../App/middleware/verifyAdminToken");
 const allowTo = require("../App/middleware/allowTo");
 const userRoles = require("../utils/roles");
-const verifyAdminToken = require("../App/middleware/verifyAdminToken");
 
-// ✅ ADMIN ROUTES (BEARER TOKEN)
-router.get(
-  "/admin/all",
-  verifyAdminToken,
-  allowTo(userRoles.ADMIN, userRoles.MANAGER),
-  getAllOrders
-);
-router.patch(
-  "/:id/status",
-  verifyAdminToken,
-  allowTo(userRoles.ADMIN, userRoles.MANAGER),
-  updateOrderStatus
-);
-// ✅ CUSTOMER ROUTES (COOKIE AUTH)
-router.post("/", verifyCookieToken, createOrder);
+// ✅ GUESTS CAN CREATE ORDERS (No auth required for creation)
+router.post("/", createOrder);
+
+// AUTH REQUIRED for user orders
 router.get("/", verifyCookieToken, getOrders);
 router.get("/:id", verifyCookieToken, getOrder);
-router.delete("/:id", verifyCookieToken, deleteOrder); // ✅ DELETE ROUTE ADDED HERE
+router.delete("/:id", verifyCookieToken, deleteOrder);
+
+// ADMIN ROUTES
+router.get("/admin/all", verifyAdminToken, allowTo(userRoles.ADMIN, userRoles.MANAGER), getAllOrders);
+router.patch("/:id/status", verifyAdminToken, allowTo(userRoles.ADMIN, userRoles.MANAGER), updateOrderStatus);
 
 module.exports = router;
