@@ -185,13 +185,10 @@ const getAllUsersAdmin = asyncWrapper(async (req, res, next) => {
 });
 
 const loginAsGuest = asyncWrapper(async (req, res, next) => {
-  // Generate unique guest ID (email-like format)
   const guestEmail = `guest_${Date.now()}_${Math.random()
     .toString(36)
     .substr(2, 9)}@guest.com`;
-  const guestId = `guest_${Date.now()}`;
 
-  // Check if guest email already exists
   let existingGuest = await User.findOne({ email: guestEmail });
   if (existingGuest) {
     const { password, ...userWithoutPass } = existingGuest.toObject();
@@ -201,13 +198,12 @@ const loginAsGuest = asyncWrapper(async (req, res, next) => {
     });
   }
 
-  // Create new guest user
   const newGuest = new User({
     firstName: "Guest",
     lastName: "",
     email: guestEmail,
     isGuest: true,
-    guestId: guestId,
+    guestId: `guest_${Date.now()}`,
     role: userRoles.USER,
     cart: [],
   });
@@ -222,14 +218,22 @@ const loginAsGuest = asyncWrapper(async (req, res, next) => {
   await newGuest.save();
 
   const { password: pwd, ...userWithoutPass } = newGuest.toObject();
-  const userWithToken = { ...userWithoutPass, token };
+
+  // ✅ SET COOKIE HERE
+  res.cookie("token", token, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "strict",
+    maxAge: 1000 * 60 * 60 * 24 * 7,
+  });
 
   res.status(201).json({
     status: httpStatusText.SUCCESS,
-    data: { user: userWithToken },
+    data: { user: userWithoutPass },
     message: "Logged in as guest successfully",
   });
 });
+
 
 const getMe = async (req, res) => {
   try {
