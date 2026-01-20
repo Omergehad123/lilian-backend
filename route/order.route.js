@@ -9,7 +9,7 @@ const {
   getAllOrders,
   getOrderByPaymentId,
   getOrderByInvoiceId,
-} = require("../App/controllers/orderController");
+} = require("../App/controllers/OrderController");
 
 const verifyCookieToken = require("../App/middleware/verifyCookieToken");
 const verifyAdminToken = require("../App/middleware/verifyAdminToken");
