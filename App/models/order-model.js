@@ -29,10 +29,6 @@ const orderSchema = new mongoose.Schema(
         },
       },
     ],
-    totalAmount: {
-      type: Number,
-      required: true,
-    },
     orderType: {
       type: String,
       enum: ["pickup", "delivery"],
@@ -101,7 +97,7 @@ const orderSchema = new mongoose.Schema(
     },
     status: {
       type: String,
-      enum: ["pending", "confirmed", "completed", "cancelled"],
+      enum: ["pending", "confirmed", "completed", "cancelled", "paid"],
       default: "pending",
     },
     promoCode: {
@@ -117,6 +113,24 @@ const orderSchema = new mongoose.Schema(
     totalAmount: { type: Number, required: true },
     specialInstructions: {
       type: String,
+    },
+    // Payment tracking fields
+    isPaid: {
+      type: Boolean,
+      default: false,
+    },
+    paymentId: {
+      type: String,
+    },
+    invoiceId: {
+      type: String,
+    },
+    paymentMethod: {
+      type: String,
+      enum: ["card", "knet", "other"],
+    },
+    paidAt: {
+      type: Date,
     },
   },
   { timestamps: true }
