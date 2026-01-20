@@ -1,86 +1,132 @@
-// controllers/orderController.js - FULL ORDER CONTROLLER WITH SHIPPING COST
 const Order = require("../models/order-model");
 const User = require("../models/users.model");
-const Promo = require("../models/Promo");
 const mongoose = require("mongoose");
 const asyncWrapper = require("../middleware/asyncWrapper");
 const AppError = require("../../utils/appError");
 const httpStatusText = require("../../utils/httpStatusText");
 
+/**
+ * CREATE ORDER (guest + logged users)
+ * Called ON CHECKOUT (before payment)
+ */
 const createOrder = asyncWrapper(async (req, res, next) => {
-  const session = await mongoose.startSession();
-  session.startTransaction();
+  const {
+    products,
+    subtotal,
+    shippingCost,
+    totalAmount,
+    orderType,
+    scheduleTime,
+    shippingAddress,
+    promoCode,
+    promoDiscount,
+    paymentMethod,
+    userInfo,
+  } = req.body;
 
-  try {
-    // 🔥 SUPPORT GUEST USERS
-    const userId = req.user?._id || new mongoose.Types.ObjectId();
-
-    const {
-      products, subtotal, shippingCost, promoDiscount, totalAmount,
-      orderType, scheduleTime, shippingAddress, userInfo, promoCode,
-      specialInstructions, paymentMethod
-    } = req.body;
-
-    // Validation (keep existing validation code...)
-    if (!products || !products.length) {
-      throw new AppError("No products provided", 400);
-    }
-
-    // Create order with payment tracking
-    const order = await Order.create([{
-      user: userId,
-      products,
-      subtotal,
-      shippingCost: shippingCost || 0,
-      promoCode: promoCode || null,
-      promoDiscount: promoDiscount || 0,
-      totalAmount,
-      orderType,
-      scheduleTime,
-      shippingAddress,
-      userInfo,
-      specialInstructions: specialInstructions || null,
-      status: "pending",           // Initial status
-      isPaid: false,               // Payment pending
-      paymentMethod: paymentMethod || null,
-    }], { session });
-
-    const createdOrder = order[0];
-
-    await session.commitTransaction();
-
-    // Populate order details
-    const populatedOrder = await Order.findById(createdOrder._id)
-      .populate("products.product")
-      .populate("user", "firstName lastName email");
-
-    res.status(201).json({
-      success: true,
-      orderId: createdOrder._id.toString(),  // ✅ Frontend needs this
-      data: populatedOrder,
-    });
-  } catch (error) {
-    await session.abortTransaction();
-    next(error);
-  } finally {
-    session.endSession();
+  if (!products || products.length === 0) {
+    return next(new AppError("Products are required", 400));
   }
+
+  let userId = null;
+  let isGuest = true;
+
+  if (req.user) {
+    userId = req.user._id;
+    isGuest = req.user.isGuest || false;
+  }
+
+  const order = await Order.create({
+    user: userId,
+    isGuest,
+    guestInfo: isGuest ? userInfo : null,
+    products,
+    subtotal,
+    shippingCost,
+    promoCode,
+    promoDiscount,
+    totalAmount,
+    orderType,
+    scheduleTime,
+    shippingAddress,
+    status: "pending",
+    isPaid: false,
+    paymentMethod,
+  });
+
+  res.status(201).json({
+    status: httpStatusText.SUCCESS,
+    data: {
+      orderId: order._id,
+      order,
+    },
+  });
 });
 
+/**
+ * PAYMENT SUCCESS (called from payment callback / webhook)
+ */
+const markOrderAsPaid = asyncWrapper(async (req, res, next) => {
+  const { orderId, paymentId, invoiceId } = req.body;
 
-const getOrders = asyncWrapper(async (req, res, next) => {
+  // 1) Try to find order by orderId first
+  let order = null;
+  if (orderId) order = await Order.findById(orderId);
+
+  // 2) If not found, try paymentId
+  if (!order && paymentId) {
+    order = await Order.findOne({ paymentId });
+  }
+
+  // 3) If still not found, try invoiceId
+  if (!order && invoiceId) {
+    order = await Order.findOne({ invoiceId });
+  }
+
+  if (!order) {
+    return next(new AppError("Order not found", 404));
+  }
+
+  // If already paid, skip
+  if (order.isPaid) {
+    return res.json({
+      status: httpStatusText.SUCCESS,
+      message: "Order already paid",
+      data: order,
+    });
+  }
+
+  order.isPaid = true;
+  order.status = "paid";
+  order.paymentId = paymentId || order.paymentId;
+  order.invoiceId = invoiceId || order.invoiceId;
+  order.paidAt = new Date();
+
+  await order.save();
+
+  res.json({
+    status: httpStatusText.SUCCESS,
+    data: order,
+  });
+});
+
+/**
+ * USER ORDERS
+ */
+const getOrders = asyncWrapper(async (req, res) => {
   const orders = await Order.find({ user: req.user._id })
     .populate("products.product")
-    .populate("user", "firstName lastName email")
     .sort({ createdAt: -1 });
 
   res.json({
     status: httpStatusText.SUCCESS,
-    count: orders.length,
     data: orders,
   });
 });
 
+/**
+ * SINGLE ORDER (success page)
+ */
 const getOrder = asyncWrapper(async (req, res, next) => {
   const order = await Order.findById(req.params.id)
     .populate("products.product")
@@ -96,48 +142,28 @@ const getOrder = asyncWrapper(async (req, res, next) => {
   });
 });
 
-const getAllOrders = asyncWrapper(async (req, res, next) => {
-  const { status, orderType, page = 1, limit = 20 } = req.query;
-
-  const query = {};
-  if (status) query.status = status;
-  if (orderType) query.orderType = orderType;
-
-  const skip = (page - 1) * limit;
-  const orders = await Order.find(query)
+/**
+ * ADMIN: ALL ORDERS
+ */
+const getAllOrders = asyncWrapper(async (req, res) => {
+  const orders = await Order.find()
     .populate("products.product")
     .populate("user", "firstName lastName email")
-    .sort({ createdAt: -1 })
-    .skip(skip)
-    .limit(limit);
-
-  const total = await Order.countDocuments(query);
+    .sort({ createdAt: -1 });
 
   res.json({
     status: httpStatusText.SUCCESS,
-    count: orders.length,
-    total,
-    page: parseInt(page),
-    pages: Math.ceil(total / limit),
     data: orders,
   });
 });
 
-const updateOrderStatus = asyncWrapper(async (req, res, next) => {
-  const { status } = req.body;
-  const validStatuses = ["pending", "confirmed", "completed", "cancelled"];
+/**
+ * GET ORDER BY PAYMENT ID
+ */
+const getOrderByPaymentId = asyncWrapper(async (req, res, next) => {
+  const { paymentId } = req.params;
 
-  if (!status || !validStatuses.includes(status)) {
-    return next(
-      new AppError(`Status must be one of: ${validStatuses.join(", ")}`, 400)
-    );
-  }
-
-  const order = await Order.findByIdAndUpdate(
-    req.params.id,
-    { status },
-    { new: true, runValidators: true }
-  )
+  const order = await Order.findOne({ paymentId })
     .populate("products.product")
     .populate("user", "firstName lastName email");
 
@@ -145,62 +171,38 @@ const updateOrderStatus = asyncWrapper(async (req, res, next) => {
     return next(new AppError("Order not found", 404));
   }
 
-  res.json({
+  res.status(200).json({
     status: httpStatusText.SUCCESS,
     data: order,
   });
 });
 
-const deleteOrder = asyncWrapper(async (req, res, next) => {
-  const orderId = req.params.id;
+/**
+ * GET ORDER BY INVOICE ID
+ */
+const getOrderByInvoiceId = asyncWrapper(async (req, res, next) => {
+  const { invoiceId } = req.params;
 
-  const order = await Order.findOne({
-    _id: orderId,
-    user: req.user._id,
-  });
+  const order = await Order.findOne({ invoiceId })
+    .populate("products.product")
+    .populate("user", "firstName lastName email");
 
-  if (!order || order.status !== "pending") {
-    return next(new AppError("Cannot delete this order", 400));
+  if (!order) {
+    return next(new AppError("Order not found", 404));
   }
 
-  await Order.findByIdAndDelete(orderId);
-
-  res.json({
+  res.status(200).json({
     status: httpStatusText.SUCCESS,
-    message: "Order deleted successfully",
-  });
-});
-
-const getOrderStats = asyncWrapper(async (req, res, next) => {
-  const stats = await Order.aggregate([
-    {
-      $group: {
-        _id: null,
-        totalOrders: { $sum: 1 },
-        totalRevenue: { $sum: "$totalAmount" },
-        avgOrderValue: { $avg: "$totalAmount" },
-        deliveryOrders: {
-          $sum: { $cond: [{ $eq: ["$orderType", "delivery"] }, 1, 0] },
-        },
-        pickupOrders: {
-          $sum: { $cond: [{ $eq: ["$orderType", "pickup"] }, 1, 0] },
-        },
-      },
-    },
-  ]);
-
-  res.json({
-    status: httpStatusText.SUCCESS,
-    data: stats[0] || {},
+    data: order,
   });
 });
 
 module.exports = {
   createOrder,
+  markOrderAsPaid,
   getOrders,
   getOrder,
   getAllOrders,
-  updateOrderStatus,
-  deleteOrder,
-  getOrderStats,
+  getOrderByPaymentId,
+  getOrderByInvoiceId,
 };

@@ -1,11 +1,11 @@
-const mongoose = require("mongoose")
+const mongoose = require("mongoose");
 
 const orderSchema = new mongoose.Schema(
   {
     user: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
-      default: null, // ✅ guest friendly
+      default: null,
     },
 
     isGuest: {
@@ -16,6 +16,7 @@ const orderSchema = new mongoose.Schema(
     guestInfo: {
       name: String,
       phone: String,
+      email: String,
     },
 
     products: [
@@ -25,11 +26,16 @@ const orderSchema = new mongoose.Schema(
           ref: "Product",
           required: true,
         },
-        quantity: { type: Number, default: 1 },
-        price: { type: Number, required: true },
-        message: { type: String, default: "" },
+        quantity: Number,
+        price: Number,
       },
     ],
+
+    subtotal: Number,
+    shippingCost: Number,
+    promoCode: String,
+    promoDiscount: Number,
+    totalAmount: Number,
 
     orderType: {
       type: String,
@@ -37,44 +43,26 @@ const orderSchema = new mongoose.Schema(
       required: true,
     },
 
-    scheduleTime: {
-      date: { type: Date, required: true },
-      timeSlot: {
-        type: String,
-        enum: [
-          "10:00 AM - 02:00 PM",
-          "02:00 PM - 06:00 PM",
-          "06:00 PM - 11:00 PM",
-        ],
-        required: true,
-      },
-    },
-
-    shippingAddress: {
-      city: String,
-      area: String,
-      street: String,
-      block: Number,
-      house: Number,
-    },
-
-    subtotal: Number,
-    shippingCost: Number,
-    totalAmount: { type: Number, required: true },
+    scheduleTime: Object,
+    shippingAddress: Object,
 
     status: {
       type: String,
-      enum: ["pending", "confirmed", "completed", "cancelled", "paid"],
+      enum: ["pending", "paid", "confirmed", "completed", "cancelled"],
       default: "pending",
     },
 
-    isPaid: { type: Boolean, default: false },
+    isPaid: {
+      type: Boolean,
+      default: false,
+    },
+
+    paymentMethod: String,
+
+    // 🔥 IMPORTANT
     paymentId: String,
     invoiceId: String,
-    paymentMethod: {
-      type: String,
-      enum: ["card", "knet", "other"],
-    },
+
     paidAt: Date,
   },
   { timestamps: true }

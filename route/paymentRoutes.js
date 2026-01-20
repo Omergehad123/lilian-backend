@@ -1,5 +1,6 @@
 const express = require("express");
 const router = express.Router();
+
 const {
   createMyFatoorahPayment,
   handlePaymentSuccess,
@@ -7,12 +8,10 @@ const {
   testPaymentEndpoint,
 } = require("../App/controllers/paymentController");
 
-console.log("✅ Payment routes loaded");
-
-// ✅ NO AUTH REQUIRED for payment - GUESTS CAN PAY
+// Guests allowed
 router.post("/myfatoorah", createMyFatoorahPayment);
-router.get("/success", handlePaymentSuccess); // ✅ GET not POST for callback
+router.get("/success", handlePaymentSuccess);
 router.post("/webhook", handleWebhook);
-router.post("/test", testPaymentEndpoint); // ← ADD THIS LINE
+router.post("/test", testPaymentEndpoint);
 
 module.exports = router;
