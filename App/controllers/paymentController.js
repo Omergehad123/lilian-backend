@@ -1,6 +1,18 @@
 const axios = require("axios");
 const Order = require("../models/order-model");
 
+// 🔥 NEW: Clean URL function to prevent double slashes
+const cleanUrl = (baseUrl, path) => {
+  if (!baseUrl || !path) return path;
+
+  // Remove trailing slash from base URL
+  const cleanBase = baseUrl.replace(/\/+$/, '');
+  // Remove leading slash from path
+  const cleanPath = path.replace(/^\/+/, '');
+
+  return `${cleanBase}/${cleanPath}`;
+};
+
 // Mapper function to convert MyFatoorah PaymentMethod to enum values
 const mapPaymentMethod = (paymentMethod) => {
   if (!paymentMethod) return "other";
@@ -31,59 +43,53 @@ const createMyFatoorahPayment = async (req, res) => {
     console.log("📥 FULL REQUEST:", JSON.stringify(req.body, null, 2));
 
     // ✅ NO USER MODEL - PURE PAYMENT LOGIC
-    const paymentMethod =
-      req.body.paymentMethod || req.body.payment_method || "card";
+    const paymentMethod = req.body.paymentMethod || req.body.payment_method || "card";
     const amountRaw = req.body.amount;
-    const customerName =
-      req.body.customerName || req.body.customer_name || "Guest Customer";
+    const customerName = req.body.customerName || req.body.customer_name || "Guest Customer";
     const customerEmail = req.body.customerEmail || "customer@lilian.com";
     const phone = req.body.phone || req.body.customerPhone || "96500000000";
     const userId = req.body.userId || "guest";
     const orderId = req.body.orderId || null;
 
-    console.log(
-      `🎯 Processing: ${amountRaw} KWD | ${paymentMethod} | ${userId}`
-    );
+    console.log(`🎯 Processing: ${amountRaw} KWD | ${paymentMethod} | ${userId}`);
 
     // VALIDATION
     if (!amountRaw) {
-      return res
-        .status(400)
-        .json({ isSuccess: false, message: "Amount is required" });
+      return res.status(400).json({ isSuccess: false, message: "Amount is required" });
     }
 
     const amount = parseFloat(amountRaw);
     if (isNaN(amount) || amount < 0.1) {
-      return res
-        .status(400)
-        .json({ isSuccess: false, message: "Minimum amount is 0.100 KWD" });
+      return res.status(400).json({ isSuccess: false, message: "Minimum amount is 0.100 KWD" });
     }
 
     // API KEY CHECK
     if (!process.env.MYFATOORAH_API_KEY) {
-      return res
-        .status(500)
-        .json({ isSuccess: false, message: "Payment gateway not configured" });
+      return res.status(500).json({ isSuccess: false, message: "Payment gateway not configured" });
     }
 
     // PAYMENT METHOD ID
     const paymentMethodId = paymentMethod === "knet" ? 1 : 2;
     console.log(`🎯 PaymentMethodId: ${paymentMethodId}`);
 
+    // 🔥 FIXED: Clean URLs using cleanUrl function
+    const frontendUrl = process.env.FRONTEND_URL || "https://lilyandelarosekw.com";
+    const successUrl = cleanUrl(frontendUrl, "payment-success");
+    const errorUrl = cleanUrl(frontendUrl, "payment-failed");
+
+    console.log(`🔗 Clean URLs - Success: ${successUrl}, Error: ${errorUrl}`);
+
     // 🔥 MYFATOORAH DIRECT EXECUTE PAYMENT
     const response = await axios.post(
-      `${process.env.MYFATOORAH_BASE_URL || "https://api.myfatoorah.com"
-      }/v2/ExecutePayment`,
+      `${process.env.MYFATOORAH_BASE_URL || "https://api.myfatoorah.com"}/v2/ExecutePayment`,
       {
         PaymentMethodId: paymentMethodId,
         InvoiceValue: amount,
         CustomerName: customerName,
         CustomerEmail: customerEmail,
         CustomerMobile: phone,
-        CallBackUrl: `${process.env.FRONTEND_URL || "https://lilyandelarosekw.com"
-          }payment-success`,
-        ErrorUrl: `${process.env.FRONTEND_URL || "https://lilyandelarosekw.com"
-          }payment-failed`,
+        CallBackUrl: successUrl,        // ✅ CLEAN URL
+        ErrorUrl: errorUrl,             // ✅ CLEAN URL
         NotificationOption: "ALL",
         Lang: "en",
         DisplayCurrencyIso: "KWD",
@@ -103,11 +109,7 @@ const createMyFatoorahPayment = async (req, res) => {
       }
     );
 
-    console.log(
-      "✅ MyFatoorah Response:",
-      response.data.IsSuccess,
-      !!response.data.Data?.PaymentURL
-    );
+    console.log("✅ MyFatoorah Response:", response.data.IsSuccess, !!response.data.Data?.PaymentURL);
 
     if (!response.data.IsSuccess || !response.data.Data?.PaymentURL) {
       console.error("❌ MyFatoorah failed:", response.data);
@@ -139,6 +141,7 @@ const createMyFatoorahPayment = async (req, res) => {
       isSuccess: true,
       paymentUrl: response.data.Data.PaymentURL,
       invoiceId: invoiceId ? invoiceId.toString() : null,
+      debug: { successUrl, errorUrl } // 🔥 Debug info
     });
   } catch (error) {
     console.error("💥 PAYMENT ERROR:", {
@@ -149,29 +152,28 @@ const createMyFatoorahPayment = async (req, res) => {
 
     res.status(500).json({
       isSuccess: false,
-      message:
-        error.response?.data?.Message ||
-        error.message ||
-        "Payment gateway error",
+      message: error.response?.data?.Message || error.message || "Payment gateway error",
     });
   }
 };
 
+// 🔥 FIXED: handlePaymentSuccess with clean URLs
 const handlePaymentSuccess = async (req, res) => {
   console.log("📥 SUCCESS CALLBACK:", req.query);
   const { paymentId, invoiceId } = req.query;
   const id = paymentId || invoiceId;
 
+  const frontendUrl = process.env.FRONTEND_URL || "https://lilyandelarosekw.com";
+
   if (!id) {
-    return res.redirect(
-      `${process.env.FRONTEND_URL || "https://lilyandelarosekw.com"
-      }payment-failed`
-    );
+    const cleanErrorUrl = cleanUrl(frontendUrl, "payment-failed");
+    console.log("❌ No payment ID - redirecting to:", cleanErrorUrl);
+    return res.redirect(cleanErrorUrl);
   }
-  res.redirect(
-    `${process.env.FRONTEND_URL || "https://lilyandelarosekw.com"
-    }payment-success?paymentId=${id}`
-  );
+
+  const cleanSuccessUrl = cleanUrl(frontendUrl, `payment-success?paymentId=${id}`);
+  console.log("✅ Success redirect to:", cleanSuccessUrl);
+  res.redirect(cleanSuccessUrl);
 };
 
 const handleWebhook = async (req, res) => {
@@ -199,30 +201,26 @@ const handleWebhook = async (req, res) => {
 
     console.log("📦 Full Webhook Payload:", JSON.stringify(webhookData, null, 2));
 
-    // MyFatoorah V1 Webhook Structure: The payload is the Data object
-    // Extract data - webhook payload is the Data object directly
+    // MyFatoorah V1 Webhook Structure: The payload is the Data object directly
     const paymentData = webhookData.Data || webhookData.data || webhookData;
 
     // Extract invoice and payment information from V1 format
     const invoiceId = paymentData.InvoiceId || paymentData.invoiceId;
     const paymentId = paymentData.PaymentId || paymentData.paymentId;
-    // V1 uses TransactionStatus (NOT InvoiceStatus) - values: "SUCCESS", "FAILED", "PENDING"
     const transactionStatus = paymentData.TransactionStatus || paymentData.transactionStatus;
-    // V1 uses PaymentMethod (NOT PaymentGateway) - values: "VISA/MASTER", "KNET", etc.
     const paymentMethod = paymentData.PaymentMethod || paymentData.paymentMethod;
+
     // Extract orderId from UserDefinedField if available
     let userDefinedField = paymentData.UserDefinedField || paymentData.userDefinedField;
     let orderIdFromField = null;
 
     if (userDefinedField) {
       try {
-        // UserDefinedField might be a JSON string or already an object
         const parsedField = typeof userDefinedField === "string"
           ? JSON.parse(userDefinedField)
           : userDefinedField;
         orderIdFromField = parsedField.orderId || parsedField.OrderId;
       } catch (e) {
-        // If parsing fails, UserDefinedField might just be a string
         console.warn("⚠️ Could not parse UserDefinedField as JSON:", e.message);
         console.warn("⚠️ UserDefinedField value:", userDefinedField);
       }
@@ -294,8 +292,7 @@ const handleWebhook = async (req, res) => {
 
       if (isPaid) {
         updateData.paidAt = new Date();
-        updateData.status = "paid"; // Update order status to paid
-        // Map payment method from MyFatoorah to enum values
+        updateData.status = "paid";
         if (paymentMethod) {
           updateData.paymentMethod = mapPaymentMethod(paymentMethod);
         }
@@ -307,9 +304,7 @@ const handleWebhook = async (req, res) => {
         `✅ Order ${order._id} payment status updated: isPaid=${isPaid}, TransactionStatus=${transactionStatus}, PaymentMethod=${paymentMethod}`
       );
     } else {
-      console.warn(
-        `⚠️ Could not update order - InvoiceId ${invoiceId} not found in database`
-      );
+      console.warn(`⚠️ Could not update order - InvoiceId ${invoiceId} not found in database`);
     }
 
     console.log("=".repeat(60));
