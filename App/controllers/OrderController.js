@@ -69,16 +69,13 @@ const createOrder = asyncWrapper(async (req, res, next) => {
 const markOrderAsPaid = asyncWrapper(async (req, res, next) => {
   const { orderId, paymentId, invoiceId } = req.body;
 
-  // 1) Try to find order by orderId first
   let order = null;
   if (orderId) order = await Order.findById(orderId);
 
-  // 2) If not found, try paymentId
   if (!order && paymentId) {
     order = await Order.findOne({ paymentId });
   }
 
-  // 3) If still not found, try invoiceId
   if (!order && invoiceId) {
     order = await Order.findOne({ invoiceId });
   }
@@ -87,7 +84,6 @@ const markOrderAsPaid = asyncWrapper(async (req, res, next) => {
     return next(new AppError("Order not found", 404));
   }
 
-  // If already paid, skip
   if (order.isPaid) {
     return res.json({
       status: httpStatusText.SUCCESS,
@@ -112,9 +108,17 @@ const markOrderAsPaid = asyncWrapper(async (req, res, next) => {
 
 /**
  * USER ORDERS
+ * ⚠️ IMPORTANT: Works for BOTH guest and logged users
  */
 const getOrders = asyncWrapper(async (req, res) => {
-  const orders = await Order.find({ user: req.user._id })
+  const userId = req.user._id;
+
+  // If guest, return orders created by this guest
+  const query = req.user.isGuest
+    ? { guestInfo: { guestId: req.user.guestId } }
+    : { user: userId };
+
+  const orders = await Order.find(query)
     .populate("products.product")
     .sort({ createdAt: -1 });
 
