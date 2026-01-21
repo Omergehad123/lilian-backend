@@ -79,6 +79,13 @@ const login = asyncWrapper(async (req, res, next) => {
   const { password: pwd, ...userWithoutPass } = user.toObject(); // remove password
   const userWithToken = { ...userWithoutPass, token }; // attach token inside user object
 
+  res.cookie("token", token, {
+    httpOnly: true,
+    sameSite: "none",
+    maxAge: 1000 * 60 * 60 * 24 * 7,
+  });
+
+
   res.json({
     status: httpStatusText.SUCCESS,
     data: { user: userWithToken },
