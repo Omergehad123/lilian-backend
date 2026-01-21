@@ -76,15 +76,16 @@ const login = asyncWrapper(async (req, res, next) => {
     role: user.role,
   });
 
-  const { password: pwd, ...userWithoutPass } = user.toObject(); // remove password
-  const userWithToken = { ...userWithoutPass, token }; // attach token inside user object
+  const { password: pwd, ...userWithoutPass } = user.toObject();
+  const userWithToken = { ...userWithoutPass, token };
 
+  // ✅ Set token cookie
   res.cookie("token", token, {
     httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
     sameSite: "none",
     maxAge: 1000 * 60 * 60 * 24 * 7,
   });
-
 
   res.json({
     status: httpStatusText.SUCCESS,
