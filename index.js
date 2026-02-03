@@ -48,8 +48,6 @@ app.get('/debug-time', (req, res) => {
     expectedString: `folder=lilian-products&timestamp=${Math.floor(Date.now() / 1000)}&transformation=c_limit,h_1000,w_1000/q_auto`
   });
 });
-
-// IMPORTANT: Webhook must be raw to validate signature
 app.use(
   "/api/payment/webhook",
   express.raw({ type: "application/json" })
