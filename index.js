@@ -41,6 +41,14 @@ app.use(
   })
 );
 
+app.get('/debug-time', (req, res) => {
+  res.json({
+    serverTime: new Date().toISOString(),
+    unixTime: Math.floor(Date.now() / 1000),
+    expectedString: `folder=lilian-products&timestamp=${Math.floor(Date.now() / 1000)}&transformation=c_limit,h_1000,w_1000/q_auto`
+  });
+});
+
 // IMPORTANT: Webhook must be raw to validate signature
 app.use(
   "/api/payment/webhook",

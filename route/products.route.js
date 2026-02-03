@@ -39,4 +39,5 @@ router.patch(
   productsController.toggleProductAvailability
 );
 
+
 module.exports = router;
