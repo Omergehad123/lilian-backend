@@ -1,7 +1,6 @@
 const multer = require("multer");
 const crypto = require("crypto");
-const { Blob } = require("buffer");
-const fetch = require("node-fetch");
+const axios = require("axios");
 const path = require("path");
 
 const storage = multer.memoryStorage();
@@ -22,16 +21,16 @@ const uploadToCloudinary = async (buffer) => {
   const apiSecret = process.env.CLOUDINARY_API_SECRET;
   const cloudName = process.env.CLOUDINARY_CLOUD_NAME;
 
-  // ✅ MANUAL SIGNATURE
+  // ✅ PERFECT SIGNATURE (your logs prove this works)
   const paramsStr = `folder=lilian-products&timestamp=${timestamp}`;
   const signature = crypto.createHmac('sha1', apiSecret).update(paramsStr).digest('hex');
 
-  // ✅ CREATE REAL BUFFER/BLOB
-  const blob = new Blob([buffer], { type: 'image/jpeg' });
-  const filename = `upload-${timestamp}.jpg`;
-
+  // ✅ BUFFER DIRECTLY - No Blob issues
   const formData = new FormData();
-  formData.append('file', blob, filename);
+  formData.append('file', buffer, {
+    filename: `image-${timestamp}.jpg`,
+    contentType: 'image/jpeg'
+  });
   formData.append('api_key', apiKey);
   formData.append('timestamp', timestamp);
   formData.append('signature', signature);
@@ -39,20 +38,24 @@ const uploadToCloudinary = async (buffer) => {
 
   console.log("📤 Uploading with signature:", signature.substring(0, 8) + '...');
 
-  const response = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/image/upload`, {
-    method: 'POST',
-    body: formData,
-  });
+  try {
+    const response = await axios.post(
+      `https://api.cloudinary.com/v1_1/${cloudName}/image/upload`,
+      formData,
+      {
+        headers: {
+          ...formData.getHeaders(),
+          'Content-Type': 'multipart/form-data'
+        }
+      }
+    );
 
-  const result = await response.json();
-
-  if (!response.ok) {
-    console.error("❌ CLOUDINARY ERROR:", result);
-    throw new Error(result.error?.message || 'Upload failed');
+    console.log("✅ UPLOAD SUCCESS:", response.data.secure_url);
+    return response.data.secure_url;
+  } catch (error) {
+    console.error("❌ UPLOAD ERROR:", error.response?.data || error.message);
+    throw new Error(error.response?.data?.error?.message || 'Upload failed');
   }
-
-  console.log("✅ UPLOAD SUCCESS:", result.secure_url);
-  return result.secure_url;
 };
 
 module.exports = { upload, uploadToCloudinary };
