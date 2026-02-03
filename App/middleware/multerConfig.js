@@ -38,13 +38,24 @@ const uploadToCloudinary = (buffer) => {
       {
         folder: "lilian-products",
         resource_type: "image",
-        transformation: "c_limit,h_1000,w_1000/q_auto", // ✅ STRING like error shows
+        // ✅ CORRECT OBJECT FORMAT (not string)
+        transformation: [
+          {
+            width: 1000,
+            height: 1000,
+            crop: "limit"
+          },
+          {
+            quality: "auto"
+          }
+        ]
       },
       (error, result) => {
         if (error) {
           console.error("Cloudinary FULL ERROR:", JSON.stringify(error, null, 2));
           reject(error);
         } else {
+          console.log("✅ SUCCESS:", result.secure_url);
           resolve(result.secure_url);
         }
       }
