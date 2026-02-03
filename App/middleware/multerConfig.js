@@ -3,15 +3,16 @@ const { v2: cloudinary } = require("cloudinary");
 const streamifier = require("streamifier");
 const path = require("path");
 
-// Configure Cloudinary
+// ✅ FORCE CORRECT TIMESTAMP (bypasses Render clock issue)
+const timestamp = Math.floor(Date.now() / 1000) - 3600; // Subtract 1hr offset
+
 cloudinary.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
   api_key: process.env.CLOUDINARY_API_KEY,
   api_secret: process.env.CLOUDINARY_API_SECRET,
-  timestamp: Math.floor(Date.now() / 1000),
+  timestamp: timestamp, // ✅ Locks current time
 });
 
-// Memory storage (no disk needed for Render)
 const storage = multer.memoryStorage();
 
 const fileFilter = (req, file, cb) => {
@@ -32,41 +33,38 @@ const upload = multer({
   fileFilter,
 });
 
-const uploadToCloudinary = (buffer) => {
-  return new Promise((resolve, reject) => {
-    const uploadStream = cloudinary.uploader.upload_stream(
-      {
-        folder: "lilian-products",
-        resource_type: "image",
-        // ✅ CORRECT OBJECT FORMAT (not string)
-        transformation: [
-          {
-            width: 1000,
-            height: 1000,
-            crop: "limit"
-          },
-          {
-            quality: "auto"
+// ✅ ULTRA-SIMPLE: No transformations, no stream issues
+const uploadToCloudinary = async (buffer) => {
+  try {
+    // Convert buffer to base64 Data URI (most reliable)
+    const base64Data = buffer.toString('base64');
+    const dataUri = `data:${buffer.mime || 'image/jpeg'};base64,${base64Data}`;
+
+    const result = await new Promise((resolve, reject) => {
+      cloudinary.uploader.upload(
+        dataUri,
+        {
+          folder: "lilian-products",
+          resource_type: "image",
+          // ✅ NO transformations until basic upload works
+        },
+        (error, result) => {
+          if (error) {
+            console.error("CLOUDINARY ERROR:", JSON.stringify(error, null, 2));
+            reject(error);
+          } else {
+            console.log("✅ UPLOAD SUCCESS:", result.secure_url);
+            resolve(result.secure_url);
           }
-        ]
-      },
-      (error, result) => {
-        if (error) {
-          console.error("Cloudinary FULL ERROR:", JSON.stringify(error, null, 2));
-          reject(error);
-        } else {
-          console.log("✅ SUCCESS:", result.secure_url);
-          resolve(result.secure_url);
         }
-      }
-    );
-    streamifier.createReadStream(buffer).pipe(uploadStream);
-  });
+      );
+    });
+
+    return result.secure_url;
+  } catch (error) {
+    console.error("UPLOAD EXCEPTION:", error);
+    throw error;
+  }
 };
 
-
-module.exports = {
-  upload,
-  uploadToCloudinary, // ✅ EXPORTED CORRECTLY
-  cloudinary,
-};
+module.exports = { upload, uploadToCloudinary, cloudinary };
