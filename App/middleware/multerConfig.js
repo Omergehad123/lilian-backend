@@ -17,29 +17,22 @@ const fileFilter = (req, file, cb) => {
 const upload = multer({ storage, limits: { fileSize: 5 * 1024 * 1024 }, fileFilter });
 
 const uploadToCloudinary = async (buffer) => {
-  const timestamp = Math.floor(Date.now() / 1000);
-  const apiKey = process.env.CLOUDINARY_API_KEY;
-  const apiSecret = process.env.CLOUDINARY_API_SECRET;
+  // ✅ FORCE CORRECT TIMESTAMP (subtract Render's 1hr clock drift)
+  const timestamp = Math.floor(Date.now() / 1000) - 3600;
   const cloudName = process.env.CLOUDINARY_CLOUD_NAME;
 
-  // ✅ YOUR SIGNATURE WORKS (logs prove it)
-  const paramsStr = `folder=lilian-products&timestamp=${timestamp}`;
-  const signature = crypto.createHmac('sha1', apiSecret).update(paramsStr).digest('hex');
-
-  // ✅ form-data LIBRARY handles Buffer Natively
+  // ✅ UNSIGNED UPLOAD - NO SIGNATURE NEEDED
   const form = new FormData();
   form.append('file', buffer, {
     filename: `image-${timestamp}.jpg`,
     contentType: 'image/jpeg'
   });
-  form.append('api_key', apiKey);
-  form.append('timestamp', timestamp);
-  form.append('signature', signature);
+  form.append('upload_preset', 'ml_default'); // Your unsigned preset
   form.append('folder', 'lilian-products');
+  form.append('timestamp', timestamp);
 
-  console.log("📤 Uploading with signature:", signature.substring(0, 8) + '...');
+  console.log("📤 UNSIGNED UPLOAD - timestamp:", timestamp);
 
-  // ✅ Use built-in Node.js https (NO external deps)
   return new Promise((resolve, reject) => {
     const req = require('https').request({
       hostname: 'api.cloudinary.com',
@@ -54,10 +47,10 @@ const uploadToCloudinary = async (buffer) => {
         try {
           const result = JSON.parse(data);
           if (res.statusCode >= 200 && res.statusCode < 300) {
-            console.log("✅ UPLOAD SUCCESS:", result.secure_url);
+            console.log("✅ UNSIGNED SUCCESS:", result.secure_url);
             resolve(result.secure_url);
           } else {
-            console.error("❌ CLOUDINARY ERROR:", result);
+            console.error("❌ UNSIGNED ERROR:", result);
             reject(new Error(result.error?.message || `HTTP ${res.statusCode}`));
           }
         } catch (err) {
@@ -70,5 +63,6 @@ const uploadToCloudinary = async (buffer) => {
     form.pipe(req);
   });
 };
+
 
 module.exports = { upload, uploadToCloudinary };
