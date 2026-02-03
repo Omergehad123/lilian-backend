@@ -1,13 +1,7 @@
 const multer = require("multer");
-const { v2: cloudinary } = require("cloudinary");
-const streamifier = require("streamifier");
+const crypto = require("crypto");
+const fetch = require("node-fetch"); // You MUST npm install this
 const path = require("path");
-
-cloudinary.config({
-  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-  api_key: process.env.CLOUDINARY_API_KEY,
-  api_secret: process.env.CLOUDINARY_API_SECRET,
-});
 
 const storage = multer.memoryStorage();
 const fileFilter = (req, file, cb) => {
@@ -19,35 +13,44 @@ const fileFilter = (req, file, cb) => {
   }
 };
 
-const upload = multer({
-  storage,
-  limits: { fileSize: 5 * 1024 * 1024 },
-  fileFilter
-});
+const upload = multer({ storage, limits: { fileSize: 5 * 1024 * 1024 }, fileFilter });
 
-// ✅ PROVEN WORKING - Minimal config
-const uploadToCloudinary = (buffer) => {
-  return new Promise((resolve, reject) => {
-    const uploadStream = cloudinary.uploader.upload_stream(
-      {
-        folder: "lilian-products",
-        resource_type: "image"
-        // NO transformations = NO signature issues
-      },
-      (error, result) => {
-        if (error) {
-          console.error("Cloudinary ERROR:", error.message);
-          reject(error);
-        } else {
-          console.log("✅ UPLOADED:", result.secure_url);
-          resolve(result.secure_url);
-        }
-      }
-    );
+// ✅ DIRECT HTTP - BYPASSES ALL SDK ISSUES
+const uploadToCloudinary = async (buffer) => {
+  const timestamp = Math.floor(Date.now() / 1000);
+  const apiKey = process.env.CLOUDINARY_API_KEY;
+  const apiSecret = process.env.CLOUDINARY_API_SECRET;
+  const cloudName = process.env.CLOUDINARY_CLOUD_NAME;
 
-    // ✅ Simple pipe - works everywhere
-    streamifier.createReadStream(buffer).pipe(uploadStream);
+  // ✅ MANUAL SIGNATURE - EXACT MATCH
+  const paramsStr = `folder=lilian-products&timestamp=${timestamp}`;
+  const signature = crypto.createHmac('sha1', apiSecret).update(paramsStr).digest('hex');
+
+  // ✅ BASE64 UPLOAD
+  const base64 = buffer.toString('base64');
+  const mimeType = 'image/jpeg';
+  const dataUri = `data:${mimeType};base64,${base64}`;
+
+  const formData = new FormData();
+  formData.append('file', dataUri, 'image.jpg');
+  formData.append('api_key', apiKey);
+  formData.append('timestamp', timestamp);
+  formData.append('signature', signature);
+  formData.append('folder', 'lilian-products');
+
+  const response = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/image/upload`, {
+    method: 'POST',
+    body: formData,
   });
+
+  const result = await response.json();
+
+  if (!response.ok) {
+    throw new Error(JSON.stringify(result.error));
+  }
+
+  console.log("✅ DIRECT UPLOAD:", result.secure_url);
+  return result.secure_url;
 };
 
 module.exports = { upload, uploadToCloudinary };
